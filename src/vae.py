@@ -65,7 +65,7 @@ def main():
     
     # Data
     
-    file_name = "DGE_matrix_CSC.pkl.gz"
+    file_name = "DGE_matrix_counts_sparse.pkl.gz"
     file_path = data_path(file_name)
     
     X_train, X_valid, X_test = data.load(file_path, shape)
@@ -415,4 +415,5 @@ def log_negative_binomial(x, r, p, approximation = "simple"):
     return y
 
 if __name__ == '__main__':
+    script_directory()
     main()

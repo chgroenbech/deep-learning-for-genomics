@@ -1,11 +1,11 @@
 import gzip
 import pickle
 
-from aux import data_path, script_directory
+from aux import script_directory
 
 def load(file_path, shape):
     
-    with gzip.open(data_path(file_path), 'rb') as data_file:
+    with gzip.open(file_path, 'rb') as data_file:
         data = pickle.load(data_file)
     
     data = data.todense().T
