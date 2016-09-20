@@ -1,0 +1,107 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{math}[2016/05/14 Math Commands Package]
+
+\RequirePackage{amsmath, mathtools}
+
+\allowdisplaybreaks
+\newcommand{\idx}[1]{_{\text{#1}}}
+\newcommand{\udx}[1]{^{\text{#1}}}
+\newcommand{\order}[1]{^{(#1)}}
+\let\dor\order
+\DeclareMathOperator{\pr}{Pr}
+\DeclareMathOperator{\E}{E}
+\DeclareMathOperator{\Var}{Var}
+\DeclareMathOperator{\Cov}{Cov}
+\DeclareMathOperator{\argmax}{arg \, max}
+\DeclareMathOperator{\erf}{erf}
+\DeclareMathOperator{\cond}{cond}
+\DeclareMathOperator{\arctanh}{arctanh}
+\DeclareMathOperator{\tracesymbol}{Tr}
+\DeclareMathOperator{\AR}{AR}
+\DeclareMathOperator{\MA}{MA}
+\DeclareMathOperator{\ARMA}{ARMA}
+\DeclareMathOperator{\ARIMA}{ARIMA}
+% \DeclareMathSymbol{\diff}{\mathord}{letters}{`\d}
+\DeclareMathSymbol{\diff}{\mathord}{operators}{`\d}
+\DeclareMathSymbol{\backshift}{\mathord}{operators}{`\B}
+\DeclareMathSymbol{\summation}{\mathord}{operators}{`\S}
+\DeclareMathSymbol{\discretediff}{\mathord}{operators}{`\D}
+\DeclareMathSymbol{\eup}{\mathord}{operators}{`\e}
+\DeclareMathSymbol{\iup}{\mathord}{operators}{`\i}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\difference}[1]{\Delta #1}
+\newcommand{\D}[2][]{
+	\ifthenelse{\isempty{#1}}{\, \mathclose{\diff \! #2}}
+	{\mathclose{\diff^{#1} \! #2}}
+}
+\newcommand{\DD}[2][]{
+	\ifthenelse{\isempty{#1}}{\discretediff \! #2}
+	{\discretediff_{#1} \! #2}
+}
+\newcommand{\deriv}[3][]{
+	\ifthenelse{\isempty{#1}}{\frac{\diff \! #2}{\diff \! #3}}
+	{\frac{\diff^{#1} \! #2}{\diff \! #3^{#1}}}
+}
+\newcommand{\pderiv}[3][]{
+	\ifthenelse{\isempty{#1}}{\frac{\partial \! #2}{\partial \! #3}}
+	{\frac{\partial^{#1} \! #2}{\partial \! #3^{#1}}}
+}
+\newcommand{\mpderiv}[3]{
+	\frac{\partial^2 \! #1}{\partial \! #2 \partial \! #3}
+}
+\newcommand{\grad}[2][]{
+	\ifthenelse{\isempty{#1}}{\nabla #2}{\nabla_{#1} #2}
+}
+\newcommand{\divg}[1]{\nabla \cdot #1}
+\newcommand{\curl}[1]{\nabla \times #1}
+\newcommand{\Hessian}[1]{\nabla^2 #1}
+\let\oldvec\vec
+\renewcommand{\vec}[1]{\bm{\mathrm{#1}}}
+\newcommand{\psvec}[1]{\tilde{\vec{#1}}}
+\newcommand{\uvec}[1]{\hat{\bm{\mathrm{#1}}}}
+\newcommand{\gvec}[1]{\oldvec{#1}}
+\newcommand{\mat}[1]{\bm{\mathrm{#1}}}
+\newcommand{\transpose}[2][]{
+	\ifthenelse{\isempty{#1}}{{#2}^\mathsf{T}}{{#2}^{#1\mathsf{T}}}
+}
+\let\T\transpose
+\newcommand{\Hermitian}[1]{{#1}^\dagger\!}
+\newcommand{\h}[1]{\Hermitian{#1}}
+\newcommand{\conjugate}[1]{\overline{#1}}
+\let\oldhat\hat
+\renewcommand{\hat}[1]{\oldhat{#1\!\,}}
+\let\olddot\dot
+\renewcommand{\dot}[1]{\olddot{#1\!\,}}
+\newcommand{\op}[1]{\hat{#1}}
+\newcommand{\modf}[1]{\widetilde{#1}}
+\newcommand{\convolution}[2]{#1 \ast #2}
+\newcommand{\correlation}[2]{#1 \star #2}
+\DeclarePairedDelimiter{\expval}{\langle}{\rangle}
+\DeclarePairedDelimiter{\abs}{\lvert}{\rvert}
+\DeclarePairedDelimiter{\detm}{\lvert}{\rvert}
+\DeclarePairedDelimiter{\norm}{\lVert}{\rVert}
+\DeclarePairedDelimiter{\parens}{(}{)}
+\DeclarePairedDelimiter{\brackets}{[}{]}
+\DeclarePairedDelimiter{\curlies}{\{}{\}}
+\DeclarePairedDelimiter{\set}{\{}{\}}
+\DeclarePairedDelimiter{\bra}{\langle}{\rvert}
+\DeclarePairedDelimiter{\ket}{\lvert}{\rangle}
+\DeclarePairedDelimiter{\ceiling}{\lceil}{\rceil}
+\DeclarePairedDelimiter{\floor}{\lfloor}{\rfloor}
+\DeclarePairedDelimiterX{\braket}[2]{\langle}{\rangle}{#1 \vert #2}
+\DeclarePairedDelimiterX{\commutator}[2]{[}{]}{#1, #2}
+\DeclarePairedDelimiterX{\anticommutator}[2]{\{}{\}}{#1, #2}
+\DeclarePairedDelimiterX{\interval}[2]{[}{]}{#1, #2}
+\newcommand{\trace}{\@ifstar\@tracestar\@trace}
+\newcommand{\@trace}[2][]{\tracesymbol \brackets[#1]{#2}}
+\newcommand{\@tracestar}[1]{\tracesymbol \brackets*{#1}}
+% \newcommand{\s}[1]{#1\mathllap{/}}
+\newcommand{\s}[1]{\slashed{#1}}
+\newcommand{\mean}[1]{\bar{#1}}
+\newcommand{\var}[1]{\sigma_{#1}^2}
+\newcommand{\width}[1]{\sigma_{#1}}
+\newcommand{\given}{\, | \,}
+\newcommand{\constant}{\text{const.}}
+\newcommand{\logicand}{\wedge}
+\newcommand{\logicor}{\vee}
