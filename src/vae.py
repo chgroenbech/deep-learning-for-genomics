@@ -41,7 +41,6 @@ def main():
     
     latent_sizes = [100]
     N_epochs = 50
-    bernoulli_sampling = False
     
     # Setup
     
@@ -79,12 +78,9 @@ def main():
     N_train_batches = X_train.shape[0] / batch_size
     N_test_batches = X_test.shape[0] / batch_size
     
-    if bernoulli_sampling:
-        preprocess = bernoullisample
-    else:
-        def preprocess(x):
-            x[numpy.where(x != 0)] = 1
-            return x
+    def preprocess(x):
+        x[numpy.where(x != 0)] = 1
+        return x
 
     # Setup shared variables
     X_train_shared = theano.shared(preprocess(X_train), borrow = True)
@@ -404,9 +400,19 @@ def main():
     
     print("All runs took {:.2f} minutes in total.".format(all_runs_duration / 60))
 
-def bernoullisample(x):
-    return numpy.random.binomial(1, x, size = x.shape).astype(theano.config.floatX)
+def log_negative_binomial(x, r, p, approximation = "simple"):
+    """
+    Compute log pdf of a negative binomial distribution with success probability p and number of failures, r, until the experiment is stopped, at values x.
+    
+    A simple variation of Stirling's approximation is used: log x! = x log x.
+    """
+    if approximation == "simple":
+        stirling = lambda x: x * T.log(x) - x
+    
+    y = stirling(x + r - 1) - stirling(x - 1) - stirling(r) \
+        + x * T.log(p) + r * T.log(1 - p)
+    
+    return y
 
 if __name__ == '__main__':
-    script_directory()
     main()
