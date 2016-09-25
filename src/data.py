@@ -1,5 +1,6 @@
 import gzip
 import pickle
+import numpy as np
 
 from aux import script_directory
 
@@ -10,6 +11,7 @@ def load(file_path, shape):
     
     data = data.todense().T
     
+    # print np.count_nonzero(data)
     X_train = data[:30000, :]
     # X_valid = data[:, 30000:35000]
     X_valid = None

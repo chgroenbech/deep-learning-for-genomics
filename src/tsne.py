@@ -180,7 +180,7 @@ if __name__ == "__main__":
 	file_path = data_path(file_name)
     
 	X_train, X_valid, X_test = data.load(file_path, shape)
-
-	Y = tsne(X_train[:10,:], 2, F, 20.0);
-	Plot.scatter(Y[:,0], Y[:,1], 20, labels);
-	Plot.show();
+	print "done loading"
+	#Y = tsne(X_train[:10,:], 2, F, 20.0);
+	#Plot.scatter(Y[:,0], Y[:,1], 20, labels);
+	#Plot.show();
