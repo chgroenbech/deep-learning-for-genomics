@@ -11,35 +11,41 @@
 #  Created by Laurens van der Maaten on 20-12-08.
 #  Copyright (c) 2008 Tilburg University. All rights reserved.
 
-import numpy as Math
+import numpy as np
 import pylab as Plot
 
 import data
 
+from sklearn.manifold import TSNE
+from scipy.sparse import csr_matrix
+import pickle
+
+
+
 from aux import data_path, figure_path, script_directory, enumerate_reversed
 
-def Hbeta(D = Math.array([]), beta = 1.0):
+def Hbeta(D = np.array([]), beta = 1.0):
 	"""Compute the perplexity and the P-row for a specific value of the precision of a Gaussian distribution."""
 
 	# Compute P-row and corresponding perplexity
-	P = Math.exp(-D.copy() * beta);
+	P = np.exp(-D.copy() * beta);
 	sumP = sum(P);
-	H = Math.log(sumP) + beta * Math.sum(D * P) / sumP;
+	H = np.log(sumP) + beta * np.sum(D * P) / sumP;
 	P = P / sumP;
 	return H, P;
 
 
-def x2p(X = Math.array([]), tol = 1e-5, perplexity = 30.0):
+def x2p(X = np.array([]), tol = 1e-5, perplexity = 30.0):
 	"""Performs a binary search to get P-values in such a way that each conditional Gaussian has the same perplexity."""
 
 	# Initialize some variables
 	print "Computing pairwise distances..."
 	(n, d) = X.shape;
-	sum_X = Math.sum(Math.square(X), 1);
-	D = Math.add(Math.add(-2 * Math.dot(X, X.T), sum_X).T, sum_X);
-	P = Math.zeros((n, n));
-	beta = Math.ones((n, 1));
-	logU = Math.log(perplexity);
+	sum_X = np.sum(np.square(X), 1);
+	D = np.add(np.add(-2 * np.dot(X, X.T), sum_X).T, sum_X);
+	P = np.zeros((n, n));
+	beta = np.ones((n, 1));
+	logU = np.log(perplexity);
 
 	# Loop over all datapoints
 	for i in range(n):
@@ -49,26 +55,26 @@ def x2p(X = Math.array([]), tol = 1e-5, perplexity = 30.0):
 			print "Computing P-values for point ", i, " of ", n, "..."
 
 		# Compute the Gaussian kernel and entropy for the current precision
-		betamin = -Math.inf;
-		betamax =  Math.inf;
-		Di = D[i, Math.concatenate((Math.r_[0:i], Math.r_[i+1:n]))];
+		betamin = -np.inf;
+		betamax =  np.inf;
+		Di = D[i, np.concatenate((np.r_[0:i], np.r_[i+1:n]))];
 		(H, thisP) = Hbeta(Di, beta[i]);
 
 		# Evaluate whether the perplexity is within tolerance
 		Hdiff = H - logU;
 		tries = 0;
-		while Math.abs(Hdiff) > tol and tries < 50:
+		while np.abs(Hdiff) > tol and tries < 50:
 
 			# If not, increase or decrease precision
 			if Hdiff > 0:
 				betamin = beta[i].copy();
-				if betamax == Math.inf or betamax == -Math.inf:
+				if betamax == np.inf or betamax == -np.inf:
 					beta[i] = beta[i] * 2;
 				else:
 					beta[i] = (beta[i] + betamax) / 2;
 			else:
 				betamax = beta[i].copy();
-				if betamin == Math.inf or betamin == -Math.inf:
+				if betamin == np.inf or betamin == -np.inf:
 					beta[i] = beta[i] / 2;
 				else:
 					beta[i] = (beta[i] + betamin) / 2;
@@ -79,25 +85,25 @@ def x2p(X = Math.array([]), tol = 1e-5, perplexity = 30.0):
 			tries = tries + 1;
 
 		# Set the final row of P
-		P[i, Math.concatenate((Math.r_[0:i], Math.r_[i+1:n]))] = thisP;
+		P[i, np.concatenate((np.r_[0:i], np.r_[i+1:n]))] = thisP;
 
 	# Return final P-matrix
-	print "Mean value of sigma: ", Math.mean(Math.sqrt(1 / beta));
+	print "Mean value of sigma: ", np.mean(np.sqrt(1 / beta));
 	return P;
 
 
-def pca(X = Math.array([]), no_dims = 50):
+def pca(X = np.array([]), no_dims = 50):
 	"""Runs PCA on the NxD array X in order to reduce its dimensionality to no_dims dimensions."""
 
 	print "Preprocessing the data using PCA..."
 	(n, d) = X.shape;
-	X = X - Math.tile(Math.mean(X, 0), (n, 1));
-	(l, M) = Math.linalg.eig(Math.dot(X.T, X));
-	Y = Math.dot(X, M[:,0:no_dims]);
+	X = X - np.tile(np.mean(X, 0), (n, 1));
+	(l, M) = np.linalg.eig(np.dot(X.T, X));
+	Y = np.dot(X, M[:,0:no_dims]);
 	return Y;
 
 
-def tsne(X = Math.array([]), no_dims = 2, initial_dims = 50, perplexity = 30.0):
+def tsne(X = np.array([]), no_dims = 2, initial_dims = 50, perplexity = 30.0):
 	"""Runs t-SNE on the dataset in the NxD array X to reduce its dimensionality to no_dims dimensions.
 	The syntaxis of the function is Y = tsne.tsne(X, no_dims, perplexity), where X is an NxD NumPy array."""
 
@@ -117,32 +123,32 @@ def tsne(X = Math.array([]), no_dims = 2, initial_dims = 50, perplexity = 30.0):
 	final_momentum = 0.8;
 	eta = 500;
 	min_gain = 0.01;
-	Y = Math.random.randn(n, no_dims);
-	dY = Math.zeros((n, no_dims));
-	iY = Math.zeros((n, no_dims));
-	gains = Math.ones((n, no_dims));
+	Y = np.random.randn(n, no_dims);
+	dY = np.zeros((n, no_dims));
+	iY = np.zeros((n, no_dims));
+	gains = np.ones((n, no_dims));
 
 	# Compute P-values
 	P = x2p(X, 1e-5, perplexity);
-	P = P + Math.transpose(P);
-	P = P / Math.sum(P);
+	P = P + np.transpose(P);
+	P = P / np.sum(P);
 	P = P * 4;									# early exaggeration
-	P = Math.maximum(P, 1e-12);
+	P = np.maximum(P, 1e-12);
 
 	# Run iterations
 	for iter in range(max_iter):
 
 		# Compute pairwise affinities
-		sum_Y = Math.sum(Math.square(Y), 1);
-		num = 1 / (1 + Math.add(Math.add(-2 * Math.dot(Y, Y.T), sum_Y).T, sum_Y));
+		sum_Y = np.sum(np.square(Y), 1);
+		num = 1 / (1 + np.add(np.add(-2 * np.dot(Y, Y.T), sum_Y).T, sum_Y));
 		num[range(n), range(n)] = 0;
-		Q = num / Math.sum(num);
-		Q = Math.maximum(Q, 1e-12);
+		Q = num / np.sum(num);
+		Q = np.maximum(Q, 1e-12);
 
 		# Compute gradient
 		PQ = P - Q;
 		for i in range(n):
-			dY[i,:] = Math.sum(Math.tile(PQ[:,i] * num[:,i], (no_dims, 1)).T * (Y[i,:] - Y), 0);
+			dY[i,:] = np.sum(np.tile(PQ[:,i] * num[:,i], (no_dims, 1)).T * (Y[i,:] - Y), 0);
 
 		# Perform the update
 		if iter < 20:
@@ -153,11 +159,11 @@ def tsne(X = Math.array([]), no_dims = 2, initial_dims = 50, perplexity = 30.0):
 		gains[gains < min_gain] = min_gain;
 		iY = momentum * iY - eta * (gains * dY);
 		Y = Y + iY;
-		Y = Y - Math.tile(Math.mean(Y, 0), (n, 1));
+		Y = Y - np.tile(np.mean(Y, 0), (n, 1));
 
 		# Compute current value of cost function
 		if (iter + 1) % 10 == 0:
-			C = Math.sum(P * Math.log(P / Q));
+			C = np.sum(P * np.log(P / Q));
 			print "Iteration ", (iter + 1), ": error is ", C
 
 		# Stop lying about P-values
@@ -171,8 +177,8 @@ def tsne(X = Math.array([]), no_dims = 2, initial_dims = 50, perplexity = 30.0):
 if __name__ == "__main__":
 	print "Run Y = tsne.tsne(X, no_dims, perplexity) to perform t-SNE on your dataset."
 	print "Running example on 2000 MNIST digits..."
-	#X = Math.loadtxt("mnist2500_X.txt");
-	#labels = Math.loadtxt("mnist2500_labels.txt");
+	#X = np.loadtxt("mnist2500_X.txt");
+	#labels = np.loadtxt("mnist2500_labels.txt");
 	F = 24658 # number of features
 	shape = [F]
 	# Data
@@ -180,7 +186,18 @@ if __name__ == "__main__":
 	file_path = data_path(file_name)
     
 	X_train, X_valid, X_test = data.load(file_path, shape)
+	# X_train = np.array([[0, 0, 0], [0, 1, 1], [1, 0, 1], [1, 1, 1]])
+	# X_train_sparse = csr_matrix(X_train)
 	print "done loading"
+
+	print "Running tsne (from sklearn)"
+	model = TSNE(n_components=2, random_state=0, n_iter=500, n_iter_without_progress=20)
+	np.set_printoptions(suppress=True)
+	X_tsne = model.fit_transform(X_train)
+	
+	with open(data_path("DGE_matrix_counts_sparse.pkl"), "wb") as DGE_file:
+    pickle.dump(DGE_matrix_sparse, DGE_file)
+	#print X_tsne 
 	#Y = tsne(X_train[:10,:], 2, F, 20.0);
-	#Plot.scatter(Y[:,0], Y[:,1], 20, labels);
-	#Plot.show();
+	Plot.scatter(X_tsne[:,0], X_tsne[:,1]) #, 20, labels);
+	Plot.show();
