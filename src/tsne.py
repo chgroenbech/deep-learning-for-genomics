@@ -191,12 +191,12 @@ if __name__ == "__main__":
 	print "done loading"
 
 	print "Running tsne (from sklearn)"
-	model = TSNE(n_components=2, random_state=0, n_iter=500, n_iter_without_progress=20)
+	model = TSNE(n_components=2, random_state=0)
 	np.set_printoptions(suppress=True)
 	X_tsne = model.fit_transform(X_train)
 	
-	with open(data_path("DGE_matrix_counts_sparse.pkl"), "wb") as DGE_file:
-    pickle.dump(DGE_matrix_sparse, DGE_file)
+	with open(data_path("training_data_tsne2.pkl"), "wb") as tsne_file:
+		pickle.dump(X_tsne, tsne_file)
 	#print X_tsne 
 	#Y = tsne(X_train[:10,:], 2, F, 20.0);
 	Plot.scatter(X_tsne[:,0], X_tsne[:,1]) #, 20, labels);
