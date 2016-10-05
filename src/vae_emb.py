@@ -39,14 +39,14 @@ def main():
     
     # Main setup
     
-    latent_sizes = [100]
-    N_epochs = 50
+    latent_sizes = [2]
+    N_epochs = 2
     
     # Setup
     
     F = 24658 # number of features
     
-    hidden_sizes = [200, 200]
+    hidden_sizes = [200]
     
     batch_size = 100
     
