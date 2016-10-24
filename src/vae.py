@@ -65,12 +65,12 @@ def main():
     
     # Data
     
-    file_name = "DGE_matrix_counts_sparse.pkl.gz"
-    file_path = data_path(file_name)
+    file_name = "GSE63472_P14Retina_merged_digital_expression"
     
-    X_train, X_valid, X_test = data.load(file_path, shape)
+    X_train, X_valid, X_test = data.load(file_name)
     
-    # X_train = numpy.concatenate([X_train, X_valid])
+    if X_valid:
+        X_train = numpy.concatenate([X_train, X_valid])
     
     X_train = X_train.astype(theano.config.floatX)
     X_test = X_test.astype(theano.config.floatX)
@@ -81,8 +81,6 @@ def main():
     # Setup shared variables
     X_train_shared = theano.shared(preprocess(X_train), borrow = True)
     X_test_shared = theano.shared(preprocess(X_test), borrow = True)
-    X_test_shared_fixed = theano.shared(preprocess(X_test), borrow = True)
-    X_test_shared_normal = theano.shared(X_test, borrow = True)
     
     all_runs_duration = 0
     
@@ -99,7 +97,9 @@ def main():
         l_enc_in = InputLayer((None, F), name = "ENC_INPUT")
         
         l_enc = l_enc_in
-    
+        
+        # TODO Add option for embedding layer.
+        
         for i, hidden_size in enumerate(hidden_sizes, start = 1):
             l_enc = DenseLayer(l_enc, num_units = hidden_size, nonlinearity = rectify, name = 'ENC_DENSE{:d}'.format(i))
     
@@ -220,13 +220,6 @@ def main():
                 costs += [cost_batch]
             return numpy.mean(costs)
     
-        def test_epoch_fixed():
-            costs = []
-            for i in range(N_test_batches):
-                cost_batch = test_model_fixed(i)
-                costs += [cost_batch]
-            return numpy.mean(costs)
-    
         # Training
     
         epochs = []
@@ -246,10 +239,9 @@ def main():
             # TODO: Using dynamically changed learning rate
             train_cost = train_epoch(learning_rate)
             test_cost = test_epoch()
-            test_cost_fixed = test_epoch_fixed()
-        
+            
             epoch_duration = time.time() - epoch_start
-        
+            
             epochs.append(epoch + 1)
             cost_train.append(train_cost)
             cost_test.append(test_cost)

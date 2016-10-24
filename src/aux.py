@@ -41,6 +41,9 @@ def savepath(path=None):
 
 figure_path  = savepath(path='../fig')
 data_path = savepath(path='../data')
+preprocessed_path = savepath(path='../data/preprocessed')
+model_path = savepath(path='../data/models')
+result_path = savepath(path='../data/results')
 
 # Helper functions
 def enumerate_reversed(a_list, start = -1):
