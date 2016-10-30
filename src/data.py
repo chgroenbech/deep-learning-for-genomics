@@ -5,12 +5,12 @@ import pickle
 import os
 
 from pandas import read_csv
-from numpy import nonzero
+from numpy import nonzero, random
 from scipy.sparse import csc_matrix
 
 from aux import script_directory, data_path, preprocessed_path
 
-def load(file_name, splitting_method = "random", splitting_parameter = None):
+def loadData(file_name):
     
     original_data_path = data_path(file_name + ".txt.gz")
     sparse_data_path = preprocessed_path(file_name + "_sparse.pkl.gz")
@@ -20,6 +20,16 @@ def load(file_name, splitting_method = "random", splitting_parameter = None):
     else:
         data = loadOriginalData(original_data_path, sparse_data_path)
     
+    return data
+
+def loadSampleData(m = 100, n = 20, mean = 1):
+    print("Creating sample data.")
+    return random.poisson(mean, (m, n))
+
+def splitData(data, splitting_method = "random", splitting_parameter = None):
+    
+    print("Splitting data.")
+    
     N, D = data.shape
     
     if splitting_method == "random":
@@ -27,12 +37,14 @@ def load(file_name, splitting_method = "random", splitting_parameter = None):
         if splitting_parameter is None:
             splitting_parameter = 0.8
         
-        T = int(splitting_parameter * N)
+        V = int(splitting_parameter * N)
+        T = int(splitting_parameter * V)
         
-        # numpy.random.shuffle(data)
+        random.shuffle(data)
         
         index_train = range(T)
-        index_test = range(T, N)
+        index_valid = range(T, V)
+        index_test = range(V, N)
         
     # Combine training set of cells (rows, i) expressing more than 900 genes.
     elif splitting_method == "Macosko":
@@ -43,13 +55,14 @@ def load(file_name, splitting_method = "random", splitting_parameter = None):
         N_non_zero_elements = (data != 0).sum(1)
         
         index_train = nonzero(N_non_zero_elements > splitting_parameter)[1]
+        index_train = None
         index_test = nonzero(N_non_zero_elements <= splitting_parameter)[1]
     
-    X_train = data[index_train, :] 
-    X_valid = None
+    X_train = data[index_train, :]
+    X_valid = data[index_valid, :]
     X_test = data[index_test, :]
     
-    print("Data split into training and test sets.")
+    print("Data split into training, validation, and test sets.")
     
     return X_train, X_valid, X_test
 
@@ -95,5 +108,5 @@ def loadSparseData(file_path):
 
 if __name__ == '__main__':
     script_directory()
-    # load("GSE63472_P14Retina_merged_digital_expression")
-    load("GSE63472_P14Retina_logDGE")
+    data = loadSampleData(10, 5)
+    print(data)
