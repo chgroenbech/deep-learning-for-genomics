@@ -8,7 +8,7 @@ from pandas import read_csv
 from numpy import nonzero, random
 from scipy.sparse import csc_matrix
 
-from aux import script_directory, data_path, preprocessed_path
+from aux import script_directory, data_path, preprocessed_path, model_path
 
 def loadData(file_name):
     
@@ -42,9 +42,9 @@ def splitData(data, splitting_method = "random", splitting_parameter = None):
         
         random.shuffle(data)
         
-        index_train = range(T)
-        index_valid = range(T, V)
-        index_test = range(V, N)
+        index_train = slice(T)
+        index_valid = slice(T, V)
+        index_test = slice(V, N)
         
     # Combine training set of cells (rows, i) expressing more than 900 genes.
     elif splitting_method == "Macosko":
@@ -105,6 +105,30 @@ def loadSparseData(file_path):
     print("Sparse data converted to dense data.")
     
     return data
+
+def saveModelParameters(parameter_value_sets, model_name):
+    
+    model_parameters_path = model_path(model_name + ".pkl.gz")
+    
+    print("Saving model parameters.")
+    
+    with gzip.open(model_parameters_path, "wb") as model_parameters_file:
+        pickle.dump(parameter_value_sets, model_parameters_file)
+    
+    print("Model parameters saved in {}.".format(model_parameters_path))
+
+def loadModelParameters(model_name):
+    
+    model_parameters_path = model_path(model_name + ".pkl.gz")
+    
+    print("Loading model parameters.")
+    
+    with gzip.open(model_parameters_path, "rb") as model_parameters_file:
+        parameter_value_sets = pickle.load(model_parameters_file)
+    
+    print("Model parameters loaded.")
+    
+    return parameter_value_sets
 
 if __name__ == '__main__':
     script_directory()
