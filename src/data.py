@@ -25,11 +25,12 @@ def loadData(file_name):
     if os.path.isfile(sparse_data_path):
         data = loadSparseData(sparse_data_path)
     else:
-        data = loadOriginalData(original_data_path, sparse_data_path)
+        data = loadOriginalData(original_data_path)
+        saveDataAsSparseData(data, sparse_data_path)
     
     return data
 
-def createSampleData(m = 100, n = 20, scale = 2, p = 0.7):
+def createSampleData(m = 100, n = 20, scale = 2, p = 0.5):
     
     print("Creating sample data.")
     
@@ -46,11 +47,11 @@ def createSampleData(m = 100, n = 20, scale = 2, p = 0.7):
     
     random.shuffle(data)
     
-    print("{} different rows.".format(k))
-    
     for i in range(m):
         for j in range(n):
             data[i, j] = random.poisson(data[i, j])
+    
+    print("Sample data created with {} different cell types.".format(k))
     
     return data
 
@@ -74,21 +75,32 @@ def splitData(data, splitting_method = "random", splitting_parameter = None):
         index_valid = slice(T, V)
         index_test = slice(V, N)
         
+        index_feature = slice(D)
+        
     # Combine training set of cells (rows, i) expressing more than 900 genes.
     elif splitting_method == "Macosko":
         
         if splitting_parameter is None:
             splitting_parameter = 900
         
-        N_non_zero_elements = (data != 0).sum(1)
+        N_non_zero_elements = (data != 0).sum(axis = 1)
         
-        index_train = nonzero(N_non_zero_elements > splitting_parameter)[1]
-        index_train = None
-        index_test = nonzero(N_non_zero_elements <= splitting_parameter)[1]
+        index_train = nonzero(N_non_zero_elements > splitting_parameter)[0]
+        index_test_valid = nonzero(N_non_zero_elements <= splitting_parameter)[0]
+        
+        random.shuffle(index_test_valid)
+        
+        N_index_test_valid = len(index_test_valid)
+        V = int(.2 * N_index_test_valid)
+        
+        index_valid = index_test_valid[:V]
+        index_test = index_test_valid[V:]
+        
+        index_feature = slice(D)
     
-    X_train = data[index_train, :]
-    X_valid = data[index_valid, :]
-    X_test = data[index_test, :]
+    X_train = data[index_train, index_feature]
+    X_valid = data[index_valid, index_feature]
+    X_test = data[index_test, index_feature]
     
     print("Data split into training, validation, and test sets.")
     
@@ -103,17 +115,6 @@ def loadOriginalData(file_path, sparse_data_path = None):
     )
     
     print("Original data loaded.")
-    
-    if sparse_data_path:
-        
-        print("Saving sparse data.")
-        
-        data_sparse = csc_matrix(data.values)
-        
-        with gzip.open(sparse_data_path, "wb") as sparse_data_file:
-            pickle.dump(data_sparse, sparse_data_file)
-        
-        print("Sparse data saved.")
     
     return data.values
 
@@ -133,6 +134,17 @@ def loadSparseData(file_path):
     print("Sparse data converted to dense data.")
     
     return data
+
+def saveDataAsSparseData(data, file_path):
+    
+    print("Saving sparse data.")
+    
+    data_sparse = csc_matrix(data.values)
+    
+    with gzip.open(file_path, "wb") as data_file:
+        pickle.dump(data_sparse, data_file)
+    
+    print("Sparse data saved.")
 
 def saveModelParameters(parameter_value_sets, model_name):
     
@@ -167,4 +179,8 @@ def saveFigure(figure, figure_name, no_spine = True):
 if __name__ == '__main__':
     script_directory()
     data = createSampleData(10, 5)
-    print(data)
+    X_train, X_valid, X_test = splitData(data, splitting_method = "Macosko", splitting_parameter = 3)
+    print(data.shape)
+    print(X_train.shape)
+    print(X_valid.shape)
+    print(X_test.shape)
