@@ -5,10 +5,17 @@ import pickle
 import os
 
 from pandas import read_csv
-from numpy import nonzero, random
+from numpy import nonzero, random, zeros
 from scipy.sparse import csc_matrix
 
-from aux import script_directory, data_path, preprocessed_path, model_path
+from seaborn import despine
+figure_extension = ".png"
+
+from aux import (
+    script_directory, data_path, preprocessed_path, model_path, figure_path
+)
+
+script_directory()
 
 def loadData(file_name):
     
@@ -22,9 +29,30 @@ def loadData(file_name):
     
     return data
 
-def loadSampleData(m = 100, n = 20, mean = 1):
+def createSampleData(m = 100, n = 20, scale = 2, p = 0.7):
+    
     print("Creating sample data.")
-    return random.poisson(mean, (m, n))
+    
+    data = zeros((m, n))
+    
+    row = scale * random.rand(n)
+    k = 0
+    for i in range(m):
+        u = random.rand()
+        if u > p:
+            row = scale * random.rand(n)
+            k += 1
+        data[i] = row
+    
+    random.shuffle(data)
+    
+    print("{} different rows.".format(k))
+    
+    for i in range(m):
+        for j in range(n):
+            data[i, j] = random.poisson(data[i, j])
+    
+    return data
 
 def splitData(data, splitting_method = "random", splitting_parameter = None):
     
@@ -130,7 +158,13 @@ def loadModelParameters(model_name):
     
     return parameter_value_sets
 
+def saveFigure(figure, figure_name, no_spine = True):
+    
+    if no_spine:
+        despine()
+    figure.savefig(figure_path(figure_name + figure_extension))
+
 if __name__ == '__main__':
     script_directory()
-    data = loadSampleData(10, 5)
+    data = createSampleData(10, 5)
     print(data)
