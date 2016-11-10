@@ -68,7 +68,7 @@ class VAE(object):
             l_dec = DenseLayer(l_dec, num_units = hidden_size, nonlinearity = rectify, name = 'DEC_DENSE{:d}'.format(len(hidden_structure) - i))
         
         l_x_p = DenseLayer(l_dec, num_units = feature_shape, nonlinearity = sigmoid, name = 'DEC_X_P')
-        l_x_log_r = DenseLayer(l_dec, num_units = feature_shape, nonlinearity = sigmoid, name = 'DEC_X_LOG_R')
+        l_x_log_r = DenseLayer(l_dec, num_units = feature_shape, nonlinearity = rectify, name = 'DEC_X_LOG_R')
         
         self.decoder = {"p": l_x_p, "log_r": l_x_log_r}
         
@@ -107,7 +107,7 @@ class VAE(object):
         all_grads = T.grad(-LL_train, all_params)
 
         # Set the update function for parameters. The Adam optimizer works really well with VAEs.
-        update_expressions = updates.adam(all_grads, all_params, learning_rate = 1e-2)
+        update_expressions = updates.adam(all_grads, all_params, learning_rate = 1e-3)
 
         self.f_train = theano.function(inputs = [symbolic_x],
                                   outputs = [LL_train, logpx_train, KL_train],
@@ -136,7 +136,7 @@ class VAE(object):
         
         for epoch in range(N_epochs):
             
-            print("Epoch {:2d}: ".format(epoch + 1), end = "")
+            epoch_string = "Epoch {:2d}: ".format(epoch + 1)
             
             shuffled_indices = numpy.random.permutation(N)
             
@@ -150,7 +150,7 @@ class VAE(object):
             logpx_train += [out[1]]
             KL_train += [out[2]]
             
-            print("log-likelihood: {:.3g} (training set)".format(int(out[0])), end = "")
+            epoch_string += "log-likelihood: {:.4g} (training set)".format(float(out[0]))
             
             if x_valid is not None:
                 out = self.f_eval(x_valid)
@@ -158,46 +158,61 @@ class VAE(object):
                 logpx_valid += [out[1]]
                 KL_valid += [out[2]]
                 
-                print(", {:.3g} (validation set)".format(int(out[0])), end = "")
+                epoch_string += ", {:.4g} (validation set)".format(float(out[0]))
                 
-            print(".")
+            epoch_string += "."
+            
+            print(epoch_string)
+        
+        self.training_learning_curve = LL_train
+        self.validation_learning_curve = LL_valid
+        
+        print("Training finished.")
     
     def save(self, name):
         
-        parameter_value_sets = {
+        model = {
             "encoder": get_all_param_values(self.encoder),
             "decoder": {
                 "p": get_all_param_values(self.decoder["p"]),
                 "log_r": get_all_param_values(self.decoder["log_r"])
-            }
+            },
+            "training learning curve": self.training_learning_curve,
+            "validation learning curve": self.validation_learning_curve,
+            # self.feature_shape
+            # self.latent_size
+            # self.hidden_structure
         }
         
         model_name = name
         
-        data.saveModelParameters(parameter_value_sets, model_name)
+        data.saveModel(model, model_name)
     
     def load(self, model_name):
         
-        parameter_value_sets = data.loadModelParameters(model_name)
+        model = data.loadModel(model_name)
         
-        set_all_param_values(self.encoder, parameter_value_sets["encoder"])
-        set_all_param_values(self.decoder["p"],
-            parameter_value_sets["decoder"]["p"])
-        set_all_param_values(self.decoder["log_r"],
-            parameter_value_sets["decoder"]["log_r"])
+        set_all_param_values(self.encoder, model["encoder"])
+        set_all_param_values(self.decoder["p"], model["decoder"]["p"])
+        set_all_param_values(self.decoder["log_r"], model["decoder"]["log_r"])
+        self.training_learning_curve = model["training learning curve"]
+        self.validation_learning_curve = model["validation learning curve"]
     
     def evaluate(self, x_test):
         LL_test, _, _ = self.f_eval(x_test)
+        
         z_eval = self.f_z(x_test)
+        
         x_p_sample, x_log_r_sample = self.f_sample(numpy.random.normal(size = (100, self.latent_size)).astype('float32'))#[0]
+        
         x_p_recon, x_log_r_recon = self.f_recon(x_test)#[0]
         
         metrics = {
             "LL_test": LL_test
         }
         
-        x_sample = meanOfNegativeBinimialDistribution(x_p_sample, x_log_r_sample)
-        x_test_recon = meanOfNegativeBinimialDistribution(x_p_recon, x_log_r_recon)
+        x_sample = meanOfNegativeBinomialDistribution(x_p_sample, x_log_r_sample)
+        x_test_recon = meanOfNegativeBinomialDistribution(x_p_recon, x_log_r_recon)
         
         return x_test_recon, x_sample, metrics
     
@@ -228,5 +243,5 @@ def log_negative_binomial(x, log_r, p, eps = 0.0, approximation = "simple"):
     
     return y
 
-def meanOfNegativeBinimialDistribution(p, log_r):
+def meanOfNegativeBinomialDistribution(p, log_r):
     return p * numpy.exp(log_r) / (1 - p)
