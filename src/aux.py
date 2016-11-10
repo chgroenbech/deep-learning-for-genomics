@@ -39,10 +39,10 @@ def savepath(path=None):
 
     return format_function
 
-figure_path  = savepath(path='../fig')
+figures_path  = savepath(path='../fig')
 data_path = savepath(path='../data')
 preprocessed_path = savepath(path='../data/preprocessed')
-model_path = savepath(path='../data/models')
+models_path = savepath(path='../data/models')
 result_path = savepath(path='../data/results')
 
 # Helper functions

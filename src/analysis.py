@@ -95,6 +95,11 @@ def plotLearningCurves(curves, name):
     figure = pyplot.figure()
     axis = figure.add_subplot(1, 1, 1)
     
+    # TODO Fix ability to plot one or more learning curves
+    # if type(curves) != dict:
+    #     axis.plot(curves)
+    #     figure_name = name + "_learning_curve"
+    # else:
     for curve in curves:
         axis.plot(curve["values"], label = curve["name"])
     axis.legend(loc = "best")

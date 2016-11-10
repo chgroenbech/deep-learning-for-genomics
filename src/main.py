@@ -29,6 +29,7 @@ def main(file_name, latent_size, hidden_structure, filtering_method = None,
     
     model = modeling.VAE(feature_size, latent_size, hidden_structure)
     
+    # TODO Check for already trained model.
     if force_training:
         model.train(training_set, validation_set, N_epochs = 100)
         model.save(name = "test")
