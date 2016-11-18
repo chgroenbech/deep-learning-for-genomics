@@ -36,7 +36,10 @@ def analyseModel(model, name = "model"):
     
     # plotLearningCurves(model.training_learning_curve, name + "_training")
     # plotLearningCurves(model.validation_learning_curve, name + "_validation")
-    plotLearningCurves([{"name": "Training set", "values": model.training_learning_curve}, {"name": "Validation set", "values": model.validation_learning_curve}], name)
+    plotLearningCurves([
+        {"name": "Training set", "values": model.training_learning_curve},
+        {"name": "Validation set", "values": model.validation_learning_curve}],
+        name)
 
 def analyseResults(x_test, x_test_recon, x_sample, name = "results",
     intensive_calculations = False):
@@ -58,9 +61,19 @@ def analyseResults(x_test, x_test_recon, x_sample, name = "results",
         cell_test = x_test[i]
         cell_test_name = name + "_cell_{}_test".format(j)
         plotProfile(cell_test, cell_test_name)
-        cell_recon = x_test_recon[i]
-        cell_recon_name = name + "_cell_{}_recon".format(j)
+        
+        cell_recon = x_test_recon["mean"][i]
+        cell_recon_name = name + "_cell_{}_recon_mean".format(j)
         plotProfile(cell_recon, cell_recon_name)
+        
+        cell_recon_p = x_test_recon["p"][i]
+        cell_recon_p_name = name + "_cell_{}_recon_p".format(j)
+        plotProfile(cell_recon_p, cell_recon_p_name)
+        
+        cell_recon_log_r = x_test_recon["log_r"][i]
+        cell_recon_log_r_name = name + "_cell_{}_recon_log_r".format(j)
+        plotProfile(cell_recon_log_r, cell_recon_log_r_name)
+        
         cell_diff = cell_test - cell_recon
         cell_diff_name = name + "_cell_{}_diff".format(j)
         plotProfile(cell_diff, cell_diff_name)
@@ -95,11 +108,10 @@ def plotLearningCurves(curves, name):
     figure = pyplot.figure()
     axis = figure.add_subplot(1, 1, 1)
     
-    # TODO Fix ability to plot one or more learning curves
-    # if type(curves) != dict:
-    #     axis.plot(curves)
-    #     figure_name = name + "_learning_curve"
-    # else:
+    if type(curves) != list:
+        axis.plot(curves)
+        figure_name = name + "_learning_curve"
+    
     for curve in curves:
         axis.plot(curve["values"], label = curve["name"])
     axis.legend(loc = "best")
