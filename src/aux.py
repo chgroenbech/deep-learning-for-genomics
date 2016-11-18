@@ -26,7 +26,7 @@ def script_directory():
     os.chdir(sys.path[0])
 
 def savepath(path=None):
-    def format_function(fname='fname', path=path):
+    def format_function(fname='', path=path):
         if not path.endswith('/'):
             path = path + '/'
         try:
