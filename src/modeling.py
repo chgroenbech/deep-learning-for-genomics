@@ -28,16 +28,22 @@ import data
 class VAE(object):
     def __init__(self, feature_shape, latent_size, hidden_structure):
         
+        # Setup
+        
         super(VAE, self).__init__()
+        
+        print("Setting up model.")
         
         self.feature_shape = feature_shape
         self.latent_size = latent_size
         self.hidden_structure = hidden_structure
         
-        print("Setting up model.")
-        
         symbolic_x = T.matrix('x')
         symbolic_z = T.matrix('z')
+        
+        self.number_of_epochs_trained = 0
+        self.training_learning_curve = []
+        self.validation_learning_curve = []
         
         # Models
     
@@ -45,8 +51,6 @@ class VAE(object):
     
         l_enc_in = InputLayer(shape = (None, feature_shape), name = "ENC_INPUT")
         l_enc = l_enc_in
-        
-        # TODO Add option for embedding layer.
         
         for i, hidden_size in enumerate(hidden_structure):
             l_enc = DenseLayer(l_enc, num_units = hidden_size, nonlinearity = rectify, name = 'ENC_DENSE{:d}'.format(i + 1))
@@ -68,7 +72,7 @@ class VAE(object):
             l_dec = DenseLayer(l_dec, num_units = hidden_size, nonlinearity = rectify, name = 'DEC_DENSE{:d}'.format(len(hidden_structure) - i))
         
         l_x_p = DenseLayer(l_dec, num_units = feature_shape, nonlinearity = sigmoid, name = 'DEC_X_P')
-        l_x_log_r = DenseLayer(l_dec, num_units = feature_shape, nonlinearity = rectify, name = 'DEC_X_LOG_R')
+        l_x_log_r = DenseLayer(l_dec, num_units = feature_shape, nonlinearity = identity, name = 'DEC_X_LOG_R')
         
         self.decoder = {"p": l_x_p, "log_r": l_x_log_r}
         
@@ -127,14 +131,19 @@ class VAE(object):
     
     def train(self, x_train, x_valid = None, N_epochs = 50, batch_size = 100):
         
-        print("Training model.")
+        training_string = "Training model for {}".format(N_epochs)
+        if self.number_of_epochs_trained > 0:
+            training_string += " additional"
+        training_string += " epochs."
+        print(training_string)
         
         LL_train, KL_train, logpx_train = [], [], []
         LL_valid, KL_valid, logpx_valid = [], [], []
         
         N = x_train.shape[0]
         
-        for epoch in range(N_epochs):
+        for epoch in range(self.number_of_epochs_trained,
+            self.number_of_epochs_trained + N_epochs):
             
             epoch_string = "Epoch {:2d}: ".format(epoch + 1)
             
@@ -164,25 +173,30 @@ class VAE(object):
             
             print(epoch_string)
         
-        self.training_learning_curve = LL_train
-        self.validation_learning_curve = LL_valid
+        self.number_of_epochs_trained += N_epochs
+        self.training_learning_curve += LL_train
+        self.validation_learning_curve += LL_valid
         
-        print("Training finished.")
+        print("Training finished with a total of {} epochs.".format(self.number_of_epochs_trained))
     
-    def save(self, name):
+    def save(self, name, metadata = None):
         
         model = {
+            "feature shape": self.feature_shape,
+            "latent size": self.latent_size,
+            "hidden structure": self.hidden_structure,
             "encoder": get_all_param_values(self.encoder),
             "decoder": {
                 "p": get_all_param_values(self.decoder["p"]),
                 "log_r": get_all_param_values(self.decoder["log_r"])
             },
+            "number of epochs trained": self.number_of_epochs_trained,
             "training learning curve": self.training_learning_curve,
             "validation learning curve": self.validation_learning_curve,
-            # self.feature_shape
-            # self.latent_size
-            # self.hidden_structure
         }
+        
+        if metadata:
+            model["metadata"] = metadata
         
         model_name = name
         
@@ -195,24 +209,33 @@ class VAE(object):
         set_all_param_values(self.encoder, model["encoder"])
         set_all_param_values(self.decoder["p"], model["decoder"]["p"])
         set_all_param_values(self.decoder["log_r"], model["decoder"]["log_r"])
+        
+        self.number_of_epochs_trained = model["number of epochs trained"]
         self.training_learning_curve = model["training learning curve"]
         self.validation_learning_curve = model["validation learning curve"]
     
     def evaluate(self, x_test):
+        
         LL_test, _, _ = self.f_eval(x_test)
+        
+        print("log-likelihood for test set: {:.4g}".format(float(LL_test)))
         
         z_eval = self.f_z(x_test)
         
-        x_p_sample, x_log_r_sample = self.f_sample(numpy.random.normal(size = (100, self.latent_size)).astype('float32'))#[0]
+        x_p_sample, x_log_r_sample = self.f_sample(numpy.random.normal(size = (100, self.latent_size)).astype('float32'))
         
-        x_p_recon, x_log_r_recon = self.f_recon(x_test)#[0]
+        x_p_recon, x_log_r_recon = self.f_recon(x_test)
         
         metrics = {
             "LL_test": LL_test
         }
         
         x_sample = meanOfNegativeBinomialDistribution(x_p_sample, x_log_r_sample)
-        x_test_recon = meanOfNegativeBinomialDistribution(x_p_recon, x_log_r_recon)
+        x_test_recon = {
+            "p": x_p_recon,
+            "log_r": x_log_r_recon,
+            "mean": meanOfNegativeBinomialDistribution(x_p_recon, x_log_r_recon)
+        }
         
         return x_test_recon, x_sample, metrics
     
@@ -234,9 +257,9 @@ def log_negative_binomial(x, log_r, p, eps = 0.0, approximation = "simple"):
     x = T.clip(x, eps, x)
     
     p = T.clip(p, eps, 1.0 - eps)
-    log_r = T.clip(log_r, eps, log_r)
     
     r = T.exp(log_r)
+    r = T.clip(r, eps, r)
     
     y = T.gammaln(x + r) - T.gammaln(x + 1) - T.gammaln(r) \
         + x * T.log(p) + r * T.log(1 - p)
