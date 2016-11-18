@@ -43,7 +43,6 @@ def main(name, latent_size, hidden_structure, filtering_method = None,
         hidden_structure, batch_size, number_of_epochs)
     
     model = modeling.VAE(feature_size, latent_size, hidden_structure)
-    print(model.number_of_epochs_trained)
     
     previous_model_name, epochs_still_to_train = \
         data.findPreviouslyTrainedModel(model_name)

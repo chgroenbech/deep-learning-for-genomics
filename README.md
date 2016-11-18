@@ -2,7 +2,7 @@
 
 Project for special course at DTU Compute together with [Maximillian Fornitz Vording][Max] in collaboration with Pers Lab.
 
-[Max]: 
+[Max]: https://github.com/maximillian91
 
 Using deep learning methods on single-cell sequencing data, we want cluster cells  and potentially classify their cell types.
 
