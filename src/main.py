@@ -18,10 +18,10 @@ def main(name, latent_size, hidden_structure, filtering_method = None,
     
     # Data
     
-    training_set, validation_set, test_set = data.loadData(name,
+    (training_set, training_headers), (validation_set, validation_headers), \
+        (test_set, test_headers) = data.loadData(name,
         filtering_method, feature_selection, feature_size,
-        splitting_method, splitting_fraction
-    )
+        splitting_method, splitting_fraction)
     
     metadata = {
         "filtering method": filtering_method,
@@ -71,7 +71,8 @@ parser = argparse.ArgumentParser(
     description='Model gene counts in single cells.',
     formatter_class=argparse.ArgumentDefaultsHelpFormatter
 )
-parser.add_argument("--name", metavar = "name", type = str, default = "sample", help = "data set name")
+parser.add_argument("--name", metavar = "name", type = str, default = "sample",
+    help = "data set name")
 parser.add_argument("--latent-size", metavar = "size", type = int,
     help = "size of latent space")
 parser.add_argument("--hidden-structure", metavar = "sizes", nargs = '+',

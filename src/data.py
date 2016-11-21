@@ -5,8 +5,8 @@ import pickle
 import os
 
 from pandas import read_csv
-from numpy import nonzero, random, zeros, sort, argsort
-from scipy.sparse import csc_matrix
+from numpy import random, array, zeros, nonzero, sort, argsort
+from scipy.sparse import csr_matrix
 
 from seaborn import despine
 figure_extension = ".png"
@@ -34,16 +34,17 @@ def loadData(name, filtering_method = None, feature_selection = None,
             data_set = selectFeatures(data_set, feature_selection, feature_size)
         training_set, validation_set, test_set = splitDataSet(data_set,
             splitting_method, splitting_fraction)
+        
+        training_headers, validation_headers, test_headers = None, None, None
     
     else:
         
-        # data_set_name = os.path.basename(data_set_name).split(".")[0]
-        
-        training_set, validation_set, test_set = loadSplitDataSets(name,
-            filtering_method, feature_selection, feature_size, splitting_method,
-            splitting_fraction)
+        (training_set, training_headers), (validation_set, validation_headers), \
+            (test_set, test_headers) = loadSplitDataSets(name, filtering_method,
+            feature_selection, feature_size, splitting_method, splitting_fraction)
     
-    return training_set, validation_set, test_set
+    return (training_set, training_headers), (validation_set, validation_headers), \
+        (test_set, test_headers)
 
 def loadSplitDataSets(name, filtering_method, feature_selection, feature_size,
     splitting_method, splitting_fraction):
@@ -59,49 +60,58 @@ def loadSplitDataSets(name, filtering_method, feature_selection, feature_size,
     
     if os.path.isfile(split_data_sets_path):
         print("Loading split data sets from {}.".format(split_data_sets_path))
-        training_set, validation_set, test_set = loadSparseData(split_data_sets_path)
+        (training_set, validation_set, test_set), \
+            (training_headers, validation_headers, test_headers) = \
+            loadSparseData(split_data_sets_path)
         print("Split data sets loaded.")
     else:
         if feature_selection:
-            data_set = loadFeatureSelectedDataSet(name, filtering_method,
+            data_set, data_headers = loadFeatureSelectedDataSet(name, filtering_method,
                 feature_selection, feature_size)
         elif filtering_method:
-            data_set = loadFilteredDataSet(name, filtering_method)
+            data_set, data_headers = loadFilteredDataSet(name, filtering_method)
         else:
             data_set = loadDataSet(name)
-        training_set, validation_set, test_set = splitDataSet(data_set, splitting_method,
-            splitting_fraction)
+        (training_set, training_headers), (validation_set, validation_headers), \
+            (test_set, test_headers) = splitDataSet(data_set, data_headers,
+            splitting_method, splitting_fraction)
+        
         print("Saving split data.")
-        saveSparseData([training_set, validation_set, test_set], split_data_sets_path)
+        saveSparseData([training_set, validation_set, test_set],
+            [training_headers, validation_headers, test_headers], split_data_sets_path)
         print("Saved split data sets as {}.".format(split_data_sets_path))
     
-    return training_set, validation_set, test_set
+    return (training_set, training_headers), (validation_set, validation_headers), \
+        (test_set, test_headers)
 
 def loadFeatureSelectedDataSet(name, filtering_method, feature_selection, feature_size):
     
     feature_selected_data_set_name = name
     if filtering_method:
         feature_selected_data_set_name += "_f_" + filtering_method
-    feature_selected_data_set_name += "_fs_" + feature_selection + "_" + str(feature_size)
-    feature_selected_data_set_path = preprocessed_path(feature_selected_data_set_name +
-        zipped_pickle_extension)
+    feature_selected_data_set_name += "_fs_" + feature_selection + "_" + \
+        str(feature_size)
+    feature_selected_data_set_path = \
+        preprocessed_path(feature_selected_data_set_name + zipped_pickle_extension)
     
     if os.path.isfile(feature_selected_data_set_path):
         print("Loading feature selected data sets from {}.".format(feature_selected_data_set_path))
-        feature_selected_data_set = loadSparseData(feature_selected_data_set_path)
+        feature_selected_data_set, feature_selected_data_headers = \
+            loadSparseData(feature_selected_data_set_path)
         print("Feature selected data set loaded.")
     else:
         if filtering_method:
-            data_set = loadFilteredDataSet(name, filtering_method)
+            data_set, data_headers = loadFilteredDataSet(name, filtering_method)
         else:
-            data_set = loadDataSet(name)
-        feature_selected_data_set = selectFeatures(data_set, feature_selection,
-            feature_size)
+            data_set, data_headers = loadDataSet(name)
+        feature_selected_data_set, feature_selected_data_headers = \
+            selectFeatures(data_set, data_headers, feature_selection, feature_size)
         print("Saving feature selected data set.")
-        saveSparseData(feature_selected_data_set, feature_selected_data_set_path)
+        saveSparseData(feature_selected_data_set, feature_selected_data_headers,
+            feature_selected_data_set_path)
         print("Saved feature selected data set as {}.".format(feature_selected_data_set_path))
     
-    return feature_selected_data_set
+    return feature_selected_data_set, feature_selected_data_headers
 
 def loadFilteredDataSet(name, filtering_method):
     
@@ -111,17 +121,19 @@ def loadFilteredDataSet(name, filtering_method):
     
     if os.path.isfile(filtered_data_set_path):
         print("Loading filtered data set from {}.".format(filtered_data_set_path))
-        filtered_data_set = loadSparseData(filtered_data_set_path)
+        filtered_data_set, filtered_data_headers = \
+            loadSparseData(filtered_data_set_path)
         print("Filtered data set loaded.")
     else:
-        data_set = loadDataSet(name)
-        type(data_set)
-        filtered_data_set = filterExamples(data_set, filtering_method)
+        data_set, data_headers = loadDataSet(name)
+        filtered_data_set, filtered_data_headers = filterExamples(data_set,
+            data_headers, filtering_method)
         print("Saving filtered data set.")
-        saveSparseData(filtered_data_set, filtered_data_set_path)
+        saveSparseData(filtered_data_set, filtered_data_headers,
+            filtered_data_set_path)
         print("Saved filtered data set as {}.".format(filtered_data_set_path))
     
-    return filtered_data_set
+    return filtered_data_set, filtered_data_headers
 
 def loadDataSet(name):
     
@@ -131,18 +143,17 @@ def loadDataSet(name):
     
     if os.path.isfile(sparse_data_path):
         print("Loading original data set in sparse representation from {}.".format(sparse_data_path))
-        data_set = loadSparseData(sparse_data_path)
-        data_set = data_set.T
+        data_set, data_headers = loadSparseData(sparse_data_path)
         print("Original data set loaded.")
     else:
         print("Loading original data set from {}.".format(original_data_path))
-        data_set = loadOriginalData(original_data_path)
+        data_set, data_headers = loadOriginalData(original_data_path)
         print("Original data set loaded.")
         print("Saving original data set in sparse representation as {}.".format(sparse_data_path))
-        saveSparseData(data, sparse_data_path)
+        saveSparseData(data_set, data_headers, sparse_data_path)
         print("Original data set in sparse representation saved.")
     
-    return data_set
+    return data_set, data_headers
 
 def createSampleData(m = 100, n = 20, scale = 2, p = 0.5):
     
@@ -169,7 +180,7 @@ def createSampleData(m = 100, n = 20, scale = 2, p = 0.5):
     
     return data
 
-def filterExamples(data, filtering_method = None):
+def filterExamples(data, headers = None, filtering_method = None):
     
     print("Filtering examples.")
     
@@ -188,9 +199,13 @@ def filterExamples(data, filtering_method = None):
     
     print("Filtered examples with {} remaining.".format(len(index_examples)))
     
-    return data[index_examples, :]
+    if headers:
+        headers["cells"] = headers["cells"][index_examples]
+        return data[index_examples], headers
+    else:
+        return data[index_examples]
 
-def selectFeatures(data, feature_selection = None, feature_size = None):
+def selectFeatures(data, headers = None, feature_selection = None, feature_size = None):
     
     print("Selecting features.")
     
@@ -213,9 +228,14 @@ def selectFeatures(data, feature_selection = None, feature_size = None):
     
     print("Filtered features with {} remaining.".format(len(index_feature)))
     
-    return data[:, index_feature]
+    if headers:
+        headers["genes"] = headers["genes"][index_feature]
+        return data[:, index_feature], headers
+    else:
+        return data[:, index_feature]
 
-def splitDataSet(data, splitting_method, splitting_fraction):
+def splitDataSet(data, headers = None, splitting_method = "random",
+    splitting_fraction = 0.8):
     
     print("Splitting data set.")
     
@@ -251,13 +271,23 @@ def splitDataSet(data, splitting_method, splitting_fraction):
         index_valid = index_test_valid[:V]
         index_test = index_test_valid[V:]
     
-    X_train = data[index_train, :]
-    X_valid = data[index_valid, :]
-    X_test = data[index_test, :]
+    training_set = data[index_train]
+    validation_set = data[index_valid]
+    test_set = data[index_test]
     
-    print("Data split into training ({} examples), validation ({} examples), and test ({} examples) sets.".format(X_train.shape[0], X_valid.shape[0], X_test.shape[0]))
+    print("Data split into training ({} examples), validation ({} examples), and test ({} examples) sets.".format(training_set.shape[0], validation_set.shape[0], test_set.shape[0]))
     
-    return X_train, X_valid, X_test
+    if headers:
+        training_headers = {"cells": headers["cells"][index_train],
+            "genes": headers["genes"]}
+        validation_headers = {"cells": headers["cells"][index_valid],
+            "genes": headers["genes"]}
+        test_headers = {"cells": headers["cells"][index_test],
+            "genes": headers["genes"]}
+        return (training_set, training_headers), (validation_set, validation_headers), \
+            (test_set, test_headers)
+    else:
+        return training_set, validation_set, test_set
 
 def loadOriginalData(file_path):
     
@@ -265,35 +295,48 @@ def loadOriginalData(file_path):
         compression = "gzip", engine = "python"
     )
     
-    return data.values
+    data_set = data.values.T
+    
+    cell_headers = array(data.columns.tolist())
+    gene_headers = array(data.index.tolist())
+    
+    data_headers = {"cells": cell_headers, "genes": gene_headers}
+    
+    return data_set, data_headers
 
 def loadSparseData(file_path):
     
+    converter = lambda sparse_data: sparse_data.todense().A
+    
     with gzip.open(file_path, 'rb') as data_file:
         sparse_data = pickle.load(data_file)
+        headers = pickle.load(data_file)
     
     if type(sparse_data) == list:
         data = []
         for sparse_data_set in sparse_data:
-            data_set = sparse_data_set.todense().A
+            data_set = converter(sparse_data_set)
             data.append(data_set)
     else:
-        data = sparse_data.todense().A
+        data = converter(sparse_data)
     
-    return data
+    return data, headers
 
-def saveSparseData(data, file_path):
+def saveSparseData(data, headers, file_path):
+    
+    converter = lambda data: csr_matrix(data)
     
     if type(data) != list:
-        sparse_data = csc_matrix(data)
+        sparse_data = converter(data)
     else:
         sparse_data = []
         for data_set in data:
-            sparse_data_set = csc_matrix(data_set)
+            sparse_data_set = converter(data_set)
             sparse_data.append(sparse_data_set)
     
     with gzip.open(file_path, "wb") as data_file:
         pickle.dump(sparse_data, data_file)
+        pickle.dump(headers, data_file)
 
 def modelName(base_name, filtering_method, feature_selection, feature_size,
     splitting_method, splitting_fraction, latent_size, hidden_structure,
@@ -358,6 +401,8 @@ def findPreviouslyTrainedModel(model_name):
         os.listdir(models_path()) if base_name in m]
     previous_numbers_of_epochs = [int(m.split(epoch_string)[-1]) for m in
         previous_model_names]
+    previous_numbers_of_epochs = [e for e in previous_numbers_of_epochs if e <= number_of_epochs]
+    previous_model_names = previous_model_names[:len(previous_numbers_of_epochs)]
     
     if len(previous_model_names) == 0:
         return None, number_of_epochs
@@ -383,10 +428,8 @@ def saveFigure(figure, figure_name, no_spine = True):
 
 if __name__ == '__main__':
     script_directory()
-    number_of_epochs = 20
-    model_name = modelName("vae", "Macosko", "high_variance",
-        5000, "random", 0.8, 50, [500], 100, number_of_epochs)
-    previous_model_name, epochs_still_to_train = \
-        findPreviouslyTrainedModel(model_name, number_of_epochs)
-    if previous_model_name:
-        print(previous_model_name, epochs_still_to_train)
+    name = "GSE63472_P14Retina_merged_digital_expression"
+    (training_set, training_headers), (validation_set, validation_headers), \
+        (test_set, test_headers) = loadData(name, "Macosko", "high_variance",
+        feature_size = 5000, splitting_method = "random", splitting_fraction = 0.8)
+    
