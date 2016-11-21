@@ -8,7 +8,7 @@ SPLITTING_METHOD="random"
 SPLITTING_FRACTION=0.8
 FEATURE_SELECTION="high_variance"
 FEATURE_SIZE=5000
-NUMBER_OF_EPOCHS=20
+NUMBER_OF_EPOCHS=10
 BATCH_SIZE=100
 LEARNING_RATE=1e-3
 
@@ -23,4 +23,3 @@ LEARNING_RATE=1e-3
               --batch-size $BATCH_SIZE \
               --learning-rate $LEARNING_RATE \
               $1
-

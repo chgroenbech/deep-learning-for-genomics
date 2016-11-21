@@ -1,8 +1,9 @@
 # Deep Learning for Genomics #
 
-Project for special course at DTU Compute together with [Maximillian Fornitz Vording][Max] in collaboration with Pers Lab.
+Project for special course at DTU Compute together with [Maximillian Fornitz Vording][Max] in collaboration with [Pers Lab][].
 
 [Max]: https://github.com/maximillian91
+[Pers Lab]: https://github.com/perslab
 
 Using deep learning methods on single-cell sequencing data, we want cluster cells  and potentially classify their cell types.
 
