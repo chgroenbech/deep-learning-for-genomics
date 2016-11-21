@@ -19,7 +19,7 @@ def main(name, latent_size, hidden_structure, filtering_method = None,
     # Data
     
     (training_set, training_headers), (validation_set, validation_headers), \
-        (test_set, test_headers) = data.loadData(name,
+        (test_set, test_headers) = data.loadCountData(name,
         filtering_method, feature_selection, feature_size,
         splitting_method, splitting_fraction)
     

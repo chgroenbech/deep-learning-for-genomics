@@ -15,12 +15,13 @@ from aux import (
     script_directory, data_path, preprocessed_path, models_path, figures_path
 )
 
-zipped_text_extension = ".txt.gz"
+text_extension = ".txt"
+zipped_text_extension = text_extension + ".gz"
 zipped_pickle_extension = ".pkl.gz"
 
 script_directory()
 
-def loadData(name, filtering_method = None, feature_selection = None,
+def loadCountData(name, filtering_method = None, feature_selection = None,
     feature_size = None, splitting_method = "random", splitting_fraction = 0.8):
     
     if filtering_method == splitting_method:
@@ -45,6 +46,21 @@ def loadData(name, filtering_method = None, feature_selection = None,
     
     return (training_set, training_headers), (validation_set, validation_headers), \
         (test_set, test_headers)
+
+def loadClusterData(name):
+    
+    cluster_path = data_path(name + text_extension)
+    
+    cluster_ids = {}
+    
+    with open(cluster_path, "r") as cluster_data:
+        for line in cluster_data.read().split("\n"):
+            if line == "":
+                continue
+            cell, cluster_id = line.split("\t")
+            cluster_ids[cell] = cluster_id
+    
+    return cluster_id
 
 def loadSplitDataSets(name, filtering_method, feature_selection, feature_size,
     splitting_method, splitting_fraction):
@@ -428,8 +444,6 @@ def saveFigure(figure, figure_name, no_spine = True):
 
 if __name__ == '__main__':
     script_directory()
-    name = "GSE63472_P14Retina_merged_digital_expression"
-    (training_set, training_headers), (validation_set, validation_headers), \
-        (test_set, test_headers) = loadData(name, "Macosko", "high_variance",
-        feature_size = 5000, splitting_method = "random", splitting_fraction = 0.8)
+    name = "retina_clusteridentities"
+    loadClusterData(name)
     
