@@ -41,10 +41,27 @@ def analyseModel(model, name = "model"):
         {"name": "Validation set", "values": model.validation_learning_curve}],
         name)
 
+def statistics(data_set, tolerance = 0.5):
+    
+    statistics = {
+        "min": data_set.min(),
+        "max": data_set.max(),
+        "mean": data_set.mean(),
+        "std": data_set.std(),
+        "sparsity": float((data_set < tolerance).sum()) / float(data_set.size)
+    }
+    
+    return statistics
+
 def analyseResults(x_test, x_test_recon, x_sample, name = "results",
     intensive_calculations = False):
     
     N, D = x_test.shape
+    
+    print("Statistics:")
+    print("  ".join(["Model        ", "  min  ", "  max  ", "mean ", " std ", "sparse"]))
+    print("Test           {min: 3.1f}  {max: 3.1f}  {mean: 3.1f}  {std: 2.2f}  {sparsity: .3g}".format(**statistics(x_test)))
+    print("Reconstructed  {min: 3.1f}  {max: 3.1f}  {mean: 3.1f}  {std: 2.2f}  {sparsity: .3g}".format(**statistics(x_test_recon["mean"])))
     
     if intensive_calculations:
         test_set_name = name + "_test"
