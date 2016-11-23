@@ -10,18 +10,20 @@ from numpy import random
 
 random.seed(42)
 
-def main(name, latent_size, hidden_structure, filtering_method = None,
+def main(data_name, cluster_name, latent_size, hidden_structure,
     splitting_method = "random", splitting_fraction = 0.8,
-    feature_selection = None, feature_size = None,
+    filtering_method = None, feature_selection = None, feature_size = None,
     number_of_epochs = 10, batch_size = 100, learning_rate = 1e-3,
     force_training = False):
     
     # Data
     
     (training_set, training_headers), (validation_set, validation_headers), \
-        (test_set, test_headers) = data.loadCountData(name,
+        (test_set, test_headers) = data.loadCountData(data_name,
         filtering_method, feature_selection, feature_size,
         splitting_method, splitting_fraction)
+    
+    clusters = data.loadClusterData(cluster_name)
     
     metadata = {
         "filtering method": filtering_method,
@@ -62,17 +64,20 @@ def main(name, latent_size, hidden_structure, filtering_method = None,
     
     analysis.analyseModel(model, name = model_name)
     
-    reconstructed_test_set, sample_set, test_metrics = model.evaluate(test_set)
-
-    analysis.analyseResults(test_set, reconstructed_test_set, sample_set,
-        name = model_name)
+    reconstructed_test_set, latent_set, sample_set, test_metrics = \
+        model.evaluate(test_set)
+    
+    analysis.analyseResults(test_set, reconstructed_test_set, test_headers,
+        clusters, latent_set, sample_set, name = model_name)
 
 parser = argparse.ArgumentParser(
     description='Model gene counts in single cells.',
     formatter_class=argparse.ArgumentDefaultsHelpFormatter
 )
-parser.add_argument("--name", metavar = "name", type = str, default = "sample",
+parser.add_argument("--data-name", metavar = "name", type = str, default = "sample",
     help = "data set name")
+parser.add_argument("--cluster-name", metavar = "name", type = str,
+    help = "cluster name")
 parser.add_argument("--latent-size", metavar = "size", type = int,
     help = "size of latent space")
 parser.add_argument("--hidden-structure", metavar = "sizes", nargs = '+',
@@ -99,10 +104,5 @@ parser.add_argument("--force-training", action = "store_true",
     help = "train model whether or not it was previously trained")
 
 if __name__ == '__main__':
-    
-    # file_name = "GSE63472_P14Retina_merged_digital_expression"
-    # latent_size = 50
-    # hidden_structure = [500]
-    
     arguments = parser.parse_args()
     main(**vars(arguments))

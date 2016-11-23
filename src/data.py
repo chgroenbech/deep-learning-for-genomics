@@ -51,16 +51,30 @@ def loadClusterData(name):
     
     cluster_path = data_path(name + text_extension)
     
-    cluster_ids = {}
+    clusters = {}
+    # cluster_ids = {}
+    
+    print("Loading cluster data from {}.".format(cluster_path))
     
     with open(cluster_path, "r") as cluster_data:
         for line in cluster_data.read().split("\n"):
+            
             if line == "":
                 continue
+                
             cell, cluster_id = line.split("\t")
-            cluster_ids[cell] = cluster_id
+            # cluster_ids[cell] = cluster_id
+            
+            cluster_id = int(cluster_id)
+            
+            if cluster_id not in clusters:
+                clusters[cluster_id] = []
+            
+            clusters[cluster_id].append(cell)
     
-    return cluster_id
+    print("Cluster data loaded.")
+    
+    return clusters
 
 def loadSplitDataSets(name, filtering_method, feature_selection, feature_size,
     splitting_method, splitting_fraction):
@@ -442,8 +456,49 @@ def saveFigure(figure, figure_name, no_spine = True):
         despine()
     figure.savefig(figures_path(figure_name + figure_extension))
 
+cluster_colours = {
+     1: (0.92, 0.24, 0.10),
+     2: (0.89, 0.60, 0.14),
+     3: (0.78, 0.71, 0.18),
+     4: (0.80, 0.74, 0.16),
+     5: (0.79, 0.76, 0.16),
+     6: (0.81, 0.80, 0.18),
+     7: (0.77, 0.79, 0.11),
+     8: (0.77, 0.80, 0.16),
+     9: (0.73, 0.78, 0.14),
+    10: (0.71, 0.79, 0.15),
+    11: (0.68, 0.78, 0.20),
+    12: (0.65, 0.78, 0.15),
+    13: (0.63, 0.79, 0.12),
+    14: (0.63, 0.80, 0.17),
+    15: (0.61, 0.78, 0.16),
+    16: (0.57, 0.78, 0.14),
+    17: (0.55, 0.78, 0.16),
+    18: (0.53, 0.79, 0.14),
+    19: (0.52, 0.80, 0.16),
+    20: (0.47, 0.80, 0.17),
+    21: (0.44, 0.80, 0.13),
+    22: (0.42, 0.80, 0.16),
+    23: (0.42, 0.79, 0.13),
+    24: (0.12, 0.79, 0.72),
+    25: (0.13, 0.64, 0.79),
+    26: (0.00, 0.23, 0.88),
+    27: (0.00, 0.24, 0.90),
+    28: (0.13, 0.23, 0.89),
+    29: (0.22, 0.23, 0.90),
+    30: (0.33, 0.22, 0.87),
+    31: (0.42, 0.23, 0.89),
+    32: (0.53, 0.22, 0.87),
+    33: (0.59, 0.24, 0.93),
+    34: (0.74, 0.14, 0.67),
+    35: (0.71, 0.13, 0.62),
+    36: (0.74, 0.09, 0.55),
+    37: (0.74, 0.08, 0.50),
+    38: (0.73, 0.06, 0.44),
+    39: (0.74, 0.06, 0.38),
+}
+
 if __name__ == '__main__':
     script_directory()
     name = "retina_clusteridentities"
-    loadClusterData(name)
-    
+    clusters = loadClusterData(name)
