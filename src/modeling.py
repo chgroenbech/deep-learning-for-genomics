@@ -218,9 +218,9 @@ class VAE(object):
         
         LL_test, _, _ = self.f_eval(x_test)
         
-        print("log-likelihood for test set: {:.4g}".format(float(LL_test)))
+        print("log-likelihood for test set: {:.4g}.".format(float(LL_test)))
         
-        z_eval = self.f_z(x_test)
+        z_eval = self.f_z(x_test)[0]
         
         x_p_sample, x_log_r_sample = self.f_sample(numpy.random.normal(size = (100, self.latent_size)).astype('float32'))
         
@@ -237,7 +237,7 @@ class VAE(object):
             "mean": meanOfNegativeBinomialDistribution(x_p_recon, x_log_r_recon)
         }
         
-        return x_test_recon, x_sample, metrics
+        return x_test_recon, z_eval, x_sample, metrics
     
     def logLikelihood(self, x_p, x_log_r, x, z_mu, z_log_var):
         #note that we sum the latent dimension and mean over the samples

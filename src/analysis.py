@@ -5,7 +5,8 @@ import data
 from matplotlib import pyplot
 import seaborn
 
-from numpy import linspace, random, nonzero
+from numpy import linspace, random, nonzero, where
+from sklearn.decomposition import PCA
 
 palette = seaborn.color_palette('Set2', 8)
 seaborn.set(style='ticks', palette = palette)
@@ -41,20 +42,8 @@ def analyseModel(model, name = "model"):
         {"name": "Validation set", "values": model.validation_learning_curve}],
         name)
 
-def statistics(data_set, tolerance = 0.5):
-    
-    statistics = {
-        "min": data_set.min(),
-        "max": data_set.max(),
-        "mean": data_set.mean(),
-        "std": data_set.std(),
-        "sparsity": float((data_set < tolerance).sum()) / float(data_set.size)
-    }
-    
-    return statistics
-
-def analyseResults(x_test, x_test_recon, x_sample, name = "results",
-    intensive_calculations = False):
+def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
+    x_sample, name = "results", intensive_calculations = False):
     
     N, D = x_test.shape
     
@@ -64,6 +53,8 @@ def analyseResults(x_test, x_test_recon, x_sample, name = "results",
     print("Reconstructed  {min: 3.1f}  {max: 3.1f}  {mean: 3.1f}  {std: 2.2f}  {sparsity: .3g}".format(**statistics(x_test_recon["mean"])))
     
     if intensive_calculations:
+        print("Creating heat maps.")
+        
         test_set_name = name + "_test"
         plotHeatMap(x_test, test_set_name)
     
@@ -73,8 +64,14 @@ def analyseResults(x_test, x_test_recon, x_sample, name = "results",
         difference_name = name + "_test_difference"
         plotHeatMap(x_test - x_test_recon, difference_name)
     
+    print("Creating latent space scatter plot.")
+    plotLatentSpace(latent_set, x_test_headers, clusters, name)
+    
     subset = random.randint(N, size = 10)
     for j, i in enumerate(subset):
+        
+        print("Creating profiles for cell {}.".format(x_test_headers["cells"][i]))
+        
         cell_test = x_test[i]
         cell_test_name = name + "_cell_{}_test".format(j)
         plotProfile(cell_test, cell_test_name)
@@ -94,7 +91,18 @@ def analyseResults(x_test, x_test_recon, x_sample, name = "results",
         cell_diff = cell_test - cell_recon
         cell_diff_name = name + "_cell_{}_diff".format(j)
         plotProfile(cell_diff, cell_diff_name)
+
+def statistics(data_set, tolerance = 0.5):
     
+    statistics = {
+        "min": data_set.min(),
+        "max": data_set.max(),
+        "mean": data_set.mean(),
+        "std": data_set.std(),
+        "sparsity": float((data_set < tolerance).sum()) / float(data_set.size)
+    }
+    
+    return statistics
 
 def plotProfile(cell, name):
     
@@ -134,6 +142,33 @@ def plotLearningCurves(curves, name):
     axis.legend(loc = "best")
     figure_name = name + "_learning_curves"
     
+    data.saveFigure(figure, figure_name)
+
+def plotLatentSpace(latent_set, x_test_headers, clusters, name):
+    
+    figure = pyplot.figure()
+    axis = figure.add_subplot(1, 1, 1)
+    
+    pca = PCA(n_components = 2)
+    pca.fit(latent_set)
+    latent_set_pc = pca.transform(latent_set)
+    
+    for cluster_id in clusters:
+        
+        cluster = clusters[cluster_id]
+        subset = []
+    
+        for cell in cluster:
+            index = where(x_test_headers["cells"] == cell)[0]
+            # print(index) # cells in headers, and hence in test set, are clustered
+            if len(index) == 0:
+                continue
+            subset.append(int(index))
+    
+        axis.scatter(latent_set_pc[subset, 0], latent_set_pc[subset, 1],
+            c = data.cluster_colours[cluster_id], edgecolors = None)
+    
+    figure_name = name + "_latent_space"
     data.saveFigure(figure, figure_name)
 
 if __name__ == '__main__':
