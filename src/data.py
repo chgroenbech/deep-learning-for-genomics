@@ -30,11 +30,12 @@ def loadCountData(name, filtering_method = None, feature_selection = None,
     if name == "sample":
         data_set = createSampleData()
         if filtering_method:
-            data_set = filterExamples(data_set, filtering_method)
+            data_set = filterExamples(data_set, filtering_method = filtering_method)
         if feature_selection:
-            data_set = selectFeatures(data_set, feature_selection, feature_size)
+            data_set = selectFeatures(data_set, feature_selection = feature_selection,
+                feature_size = feature_size)
         training_set, validation_set, test_set = splitDataSet(data_set,
-            splitting_method, splitting_fraction)
+            splitting_method = splitting_method, splitting_fraction = splitting_fraction)
         
         training_headers, validation_headers, test_headers = None, None, None
     
@@ -300,6 +301,8 @@ def splitDataSet(data, headers = None, splitting_method = "random",
         
         index_valid = index_test_valid[:V]
         index_test = index_test_valid[V:]
+    
+    print(splitting_method)
     
     training_set = data[index_train]
     validation_set = data[index_valid]

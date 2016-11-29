@@ -74,7 +74,6 @@ class VAE(object):
         # Sample a latent representation z \sim q(z|x) = N(mu(x), logvar(x))
         l_z = SimpleSampleLayer(mean = l_z_mu, log_var = l_z_log_var, name = "ENC_SAMPLE")
         
-        l_enc_in, l_z = self.buildEncoder(feature_shape, hidden_structure)
         self.encoder = l_z
         
         ## Generative model p(x|z)
