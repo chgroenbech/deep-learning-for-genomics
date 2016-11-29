@@ -36,6 +36,8 @@ def main(data_name, cluster_name, latent_size, hidden_structure,
         "test size": test_set.shape[0]
     }
     
+    print("")
+    
     # Model
     
     feature_size = training_set.shape[1]
@@ -49,6 +51,8 @@ def main(data_name, cluster_name, latent_size, hidden_structure,
     previous_model_name, epochs_still_to_train = \
         data.findPreviouslyTrainedModel(model_name)
     
+    print("")
+    
     if previous_model_name and not force_training:
         model.load(previous_model_name)
         if epochs_still_to_train > 0:
@@ -60,6 +64,8 @@ def main(data_name, cluster_name, latent_size, hidden_structure,
             N_epochs = number_of_epochs, batch_size = batch_size)
         model.save(name = model_name, metadata = metadata)
     
+    print("")
+    
     # Analysis
     
     analysis.analyseModel(model, name = model_name)
@@ -68,7 +74,8 @@ def main(data_name, cluster_name, latent_size, hidden_structure,
         model.evaluate(test_set)
     
     analysis.analyseResults(test_set, reconstructed_test_set, test_headers,
-        clusters, latent_set, sample_set, name = model_name)
+        clusters, latent_set, sample_set, name = model_name,
+        intensive_calculations = True)
 
 parser = argparse.ArgumentParser(
     description='Model gene counts in single cells.',

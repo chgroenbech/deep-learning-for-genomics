@@ -2,6 +2,8 @@ import os, sys
 
 from itertools import izip, count
 
+from math import floor
+
 # Plotting
 
 colours = [
@@ -48,6 +50,21 @@ result_path = savepath(path='../data/results')
 # Helper functions
 def enumerate_reversed(a_list, start = -1):
     return izip(count(len(a_list) + start, -1), reversed(a_list))
+
+def convertTimeToString(seconds):
+    if seconds < 1:
+        return "{:.0f} ms".format(1000 * seconds)
+    elif seconds < 60:
+        return "{:.3g} s".format(seconds)
+    elif seconds < 60 * 60:
+        minutes = floor(seconds / 60)
+        seconds = seconds % 60
+        return "{:.0f}m {:.0f}s".format(minutes, seconds)
+    else:
+        hours = floor(seconds / 60 / 60)
+        minutes = floor((seconds / 60) % 60)
+        seconds = seconds % 60
+        return "{:.0f}h {:.0f}m {:.0f}s".format(hours, minutes, seconds)
 
 # Shell output
 

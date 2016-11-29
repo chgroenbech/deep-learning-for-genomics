@@ -25,6 +25,9 @@ from lasagne import updates
 
 import data
 
+from time import time
+from aux import convertTimeToString
+
 class VAE(object):
     def __init__(self, feature_shape, latent_size, hidden_structure):
         
@@ -42,8 +45,18 @@ class VAE(object):
         symbolic_z = T.matrix('z')
         
         self.number_of_epochs_trained = 0
-        self.training_learning_curve = []
-        self.validation_learning_curve = []
+        self.learning_curves = {
+            "training": {
+                "lower bound": [],
+                "log p(x|z)": [],
+                "KL divergence": []
+            },
+            "validation": {
+                "lower bound": [],
+                "log p(x|z)": [],
+                "KL divergence": []
+            }
+        }
         
         # Models
     
@@ -61,6 +74,7 @@ class VAE(object):
         # Sample a latent representation z \sim q(z|x) = N(mu(x), logvar(x))
         l_z = SimpleSampleLayer(mean = l_z_mu, log_var = l_z_log_var, name = "ENC_SAMPLE")
         
+        l_enc_in, l_z = self.buildEncoder(feature_shape, hidden_structure)
         self.encoder = l_z
         
         ## Generative model p(x|z)
@@ -137,15 +151,17 @@ class VAE(object):
         training_string += " epochs."
         print(training_string)
         
-        LL_train, KL_train, logpx_train = [], [], []
-        LL_valid, KL_valid, logpx_valid = [], [], []
+        LL_train, logpx_train, KL_train = [], [], []
+        LL_valid, logpx_valid, KL_valid = [], [], []
         
         N = x_train.shape[0]
+        
+        training_start = time()
         
         for epoch in range(self.number_of_epochs_trained,
             self.number_of_epochs_trained + N_epochs):
             
-            epoch_string = "Epoch {:2d}: ".format(epoch + 1)
+            epoch_start = time()
             
             shuffled_indices = numpy.random.permutation(N)
             
@@ -159,7 +175,7 @@ class VAE(object):
             logpx_train += [out[1]]
             KL_train += [out[2]]
             
-            epoch_string += "log-likelihood: {:.4g} (training set)".format(float(out[0]))
+            evaluation_string = "    Training set:   lower bound: {:.5g}, log p(x|z): {:.5g}, KL divergence: {:.5g}.".format(float(out[0]), float(out[1]), float(out[2]))
             
             if x_valid is not None:
                 out = self.f_eval(x_valid)
@@ -167,17 +183,26 @@ class VAE(object):
                 logpx_valid += [out[1]]
                 KL_valid += [out[2]]
                 
-                epoch_string += ", {:.4g} (validation set)".format(float(out[0]))
-                
-            epoch_string += "."
+                evaluation_string += "\n    Validation set: lower bound: {:.5g}, log p(x|z): {:.5g}, KL divergence: {:.5g}.".format(float(out[0]), float(out[1]), float(out[2]))
             
-            print(epoch_string)
+            epoch_duration = time() - epoch_start
+                
+            print("Epoch {:2d} ({}):".format(epoch + 1, convertTimeToString(epoch_duration)))
+            print(evaluation_string)
+        
+        training_duration = time() - training_start
         
         self.number_of_epochs_trained += N_epochs
-        self.training_learning_curve += LL_train
-        self.validation_learning_curve += LL_valid
         
-        print("Training finished with a total of {} epochs.".format(self.number_of_epochs_trained))
+        self.learning_curves["training"]["lower bound"] += LL_train
+        self.learning_curves["training"]["log p(x|z)"] += logpx_train
+        self.learning_curves["training"]["KL divergence"] += KL_train
+        
+        self.learning_curves["validation"]["lower bound"] += LL_valid
+        self.learning_curves["validation"]["log p(x|z)"] += logpx_valid
+        self.learning_curves["validation"]["KL divergence"] += KL_valid
+        
+        print("Training finished with a total of {} epochs after {}.".format(self.number_of_epochs_trained, convertTimeToString(training_duration)))
     
     def save(self, name, metadata = None):
         
@@ -191,8 +216,7 @@ class VAE(object):
                 "log_r": get_all_param_values(self.decoder["log_r"])
             },
             "number of epochs trained": self.number_of_epochs_trained,
-            "training learning curve": self.training_learning_curve,
-            "validation learning curve": self.validation_learning_curve,
+            "learning curves": self.learning_curves,
         }
         
         if metadata:
@@ -211,8 +235,7 @@ class VAE(object):
         set_all_param_values(self.decoder["log_r"], model["decoder"]["log_r"])
         
         self.number_of_epochs_trained = model["number of epochs trained"]
-        self.training_learning_curve = model["training learning curve"]
-        self.validation_learning_curve = model["validation learning curve"]
+        self.learning_curves = model["learning curves"]
     
     def evaluate(self, x_test):
         
@@ -231,6 +254,7 @@ class VAE(object):
         }
         
         x_sample = meanOfNegativeBinomialDistribution(x_p_sample, x_log_r_sample)
+        
         x_test_recon = {
             "p": x_p_recon,
             "log_r": x_log_r_recon,

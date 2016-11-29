@@ -5,7 +5,7 @@ import data
 from matplotlib import pyplot
 import seaborn
 
-from numpy import linspace, random, nonzero, where
+from numpy import linspace, random, nonzero, where, inf, log, exp
 from sklearn.decomposition import PCA
 
 palette = seaborn.color_palette('Set2', 8)
@@ -35,34 +35,36 @@ def analyseData(data_set, name = "data", intensive_calculations = False):
 
 def analyseModel(model, name = "model"):
     
-    # plotLearningCurves(model.training_learning_curve, name + "_training")
-    # plotLearningCurves(model.validation_learning_curve, name + "_validation")
-    plotLearningCurves([
-        {"name": "Training set", "values": model.training_learning_curve},
-        {"name": "Validation set", "values": model.validation_learning_curve}],
-        name)
+    plotLearningCurves(model.learning_curves, name)
 
 def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
     x_sample, name = "results", intensive_calculations = False):
     
     N, D = x_test.shape
     
-    print("Statistics:")
-    print("  ".join(["Model        ", "  min  ", "  max  ", "mean ", " std ", "sparse"]))
-    print("Test           {min: 3.1f}  {max: 3.1f}  {mean: 3.1f}  {std: 2.2f}  {sparsity: .3g}".format(**statistics(x_test)))
-    print("Reconstructed  {min: 3.1f}  {max: 3.1f}  {mean: 3.1f}  {std: 2.2f}  {sparsity: .3g}".format(**statistics(x_test_recon["mean"])))
+    data_sets = [
+        {"data_set": x_test, "name": "Test", "tolerance": 0.5},
+        {"data_set": x_test_recon["mean"], "name": "Reconstructed",
+         "tolerance": 0.5},
+        {"data_set": x_test_recon["p"], "name": "p"},
+        {"data_set": exp(x_test_recon["log_r"]), "name": "r"}
+    ]
+    printSummaryStatistics([statistics(**data_set) for data_set in data_sets])
     
     if intensive_calculations:
         print("Creating heat maps.")
         
         test_set_name = name + "_test"
         plotHeatMap(x_test, test_set_name)
-    
+        
         reconstructed_test_set_name = name + "_test_recon"
-        plotHeatMap(x_test_recon, reconstructed_test_set_name)
-    
+        plotHeatMap(x_test_recon["mean"], reconstructed_test_set_name)
+        
         difference_name = name + "_test_difference"
-        plotHeatMap(x_test - x_test_recon, difference_name)
+        plotHeatMap(x_test - x_test_recon["mean"], difference_name)
+        
+        log_ratio_name = name + "_test_log_ratio"
+        plotHeatMap(log(x_test / x_test_recon["mean"] + 1), log_ratio_name)
     
     print("Creating latent space scatter plot.")
     plotLatentSpace(latent_set, x_test_headers, clusters, name)
@@ -92,17 +94,47 @@ def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
         cell_diff_name = name + "_cell_{}_diff".format(j)
         plotProfile(cell_diff, cell_diff_name)
 
-def statistics(data_set, tolerance = 0.5):
+def statistics(data_set, name = "", tolerance = 1e-3):
     
     statistics = {
-        "min": data_set.min(),
-        "max": data_set.max(),
+        "name": name,
         "mean": data_set.mean(),
         "std": data_set.std(),
+        "min": data_set.min(),
+        "minimums": (data_set < data_set.min() + tolerance).sum(),
+        "max": data_set.max(),
+        "maximums": (data_set >= data_set.max() - tolerance).sum(),
         "sparsity": float((data_set < tolerance).sum()) / float(data_set.size)
     }
     
     return statistics
+
+def printSummaryStatistics(statistics_sets):
+    
+    if type(statistics_sets) != list:
+        statistics_sets = [statistics_sets]
+    
+    name_width = 0
+    
+    for statistics_set in statistics_sets:
+        name_width = max(len(statistics_set["name"]), name_width)
+    
+    print("Statistics:")
+    print("  ".join(["{:{}}".format("Data set", name_width), "mean", "std ", " minimum ", "n_minimum", " maximum ", "n_maximum", "sparsity"]))
+    
+    for statistics_set in statistics_sets:
+        string_parts = [
+            "{:{}}".format(statistics_set["name"], name_width),
+            "{:<4.2f}".format(statistics_set["mean"]),
+            "{:<4.2g}".format(statistics_set["std"]),
+            "{:<9.3g}".format(statistics_set["min"]),
+            "{:>7d}".format(statistics_set["minimums"]),
+            "{:<9.3g}".format(statistics_set["max"]),
+            "{:>7d}".format(statistics_set["maximums"]),
+            "{:<7.5g}".format(statistics_set["sparsity"]),
+        ]
+        
+        print("  ".join(string_parts))
 
 def plotProfile(cell, name):
     
@@ -123,26 +155,44 @@ def plotHeatMap(data_set, name):
     figure = pyplot.figure()
     axis = figure.add_subplot(1, 1, 1)
     
-    seaborn.heatmap(data_set.T, xticklabels = False, yticklabels = False, cbar = False, square = True, ax = axis)
+    seaborn.heatmap(data_set.T, xticklabels = False, yticklabels = False, cbar = True, square = True, ax = axis)
     
     figure_name = name + "_heat_map"
     data.saveFigure(figure, figure_name, no_spine = False)
 
 def plotLearningCurves(curves, name):
     
-    figure = pyplot.figure()
-    axis = figure.add_subplot(1, 1, 1)
+    figure_1 = pyplot.figure()
+    axis_1 = figure_1.add_subplot(1, 1, 1)
     
-    if type(curves) != list:
-        axis.plot(curves)
-        figure_name = name + "_learning_curve"
+    figure_2 = pyplot.figure()
+    axis_2 = figure_2.add_subplot(1, 1, 1)
     
-    for curve in curves:
-        axis.plot(curve["values"], label = curve["name"])
-    axis.legend(loc = "best")
-    figure_name = name + "_learning_curves"
+    for i, (curve_set_name, curve_set) in enumerate(sorted(curves.items())):
+        
+        colour = palette[i]
+        
+        for curve_name, curve in sorted(curve_set.items()):
+            if curve_name == "lower bound":
+                line_style = "solid"
+                curve_name = curve_name.capitalize()
+                axis = axis_1
+            elif curve_name == "log p(x|z)":
+                line_style = "dashed"
+                axis = axis_1
+            elif curve_name == "KL divergence":
+                line_style = "dotted"
+                axis = axis_2
+            label = curve_name + " ({} set)".format(curve_set_name)
+            axis.plot(curve, color = colour, linestyle = line_style, label = label)
     
-    data.saveFigure(figure, figure_name)
+    axis_1.legend(loc = "best")
+    
+    figure_1_name = name + "_learning_curves"
+    data.saveFigure(figure_1, figure_1_name)
+    
+    figure_2_name = name + "_learning_curves_KL"
+    data.saveFigure(figure_2, figure_2_name)
 
 def plotLatentSpace(latent_set, x_test_headers, clusters, name):
     
