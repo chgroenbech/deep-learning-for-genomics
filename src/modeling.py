@@ -17,7 +17,7 @@ from parmesan.layers.sample import SimpleSampleLayer, SampleLayer
 from lasagne.nonlinearities import identity, sigmoid, rectify, softmax, softplus, tanh
 
 from parmesan.distributions import (
-    log_stdnormal, log_normal2, log_bernoulli,
+    log_normal, log_bernoulli,
     kl_normal2_stdnormal
 )
 
@@ -28,12 +28,12 @@ import data
 from time import time
 from aux import convertTimeToString
 
-class VAE(object):
-    def __init__(self, feature_shape, latent_size, hidden_structure):
+class VariationalAutoEncoder(object):
+    def __init__(self, feature_shape, latent_size, hidden_structure, reconstruction_distribution = None):
         
         # Setup
         
-        super(VAE, self).__init__()
+        super(VariationalAutoEncoder, self).__init__()
         
         print("Setting up model.")
         
@@ -43,6 +43,7 @@ class VAE(object):
         
         symbolic_x = T.matrix('x')
         symbolic_z = T.matrix('z')
+        symbolic_learning_rate = T.scalar("epsilon")
         
         self.number_of_epochs_trained = 0
         self.learning_curves = {
@@ -58,16 +59,29 @@ class VAE(object):
             }
         }
         
-        self.x_parameters = ["p", "log_r"]
-        self.reconstruction_activation_functions = {
-            "p": sigmoid,
-            "log_r": identity
-        }
-        self.expectedNegativeReconstructionError = lambda x, x_theta, eps = 0.0: \
-            log_negative_binomial(x, x_theta["p"], x_theta["log_r"], eps)
-        self.meanOfReconstructionDistribution = lambda x_theta: \
-            meanOfNegativeBinomialDistribution(x_theta["p"], x_theta["log_r"])
-        self.preprocess = lambda x: x
+        if reconstruction_distribution:
+            
+            if type(reconstruction_distribution) == str:
+                reconstruction_distribution = \
+                    reconstruction_distributions[reconstruction_distribution]
+            
+            self.x_parameters = reconstruction_distribution["parameters"]
+            self.reconstruction_activation_functions = \
+                reconstruction_distribution["activation functions"]
+            self.expectedNegativeReconstructionError = reconstruction_distribution["function"]
+            self.meanOfReconstructionDistribution = reconstruction_distribution["mean"]
+            self.preprocess = reconstruction_distribution["preprocess"]
+        else:
+            # Use a Gaussian distribution as standard
+            self.x_parameters = ["mu", "sigma"]
+            self.reconstruction_activation_functions = {
+                "mu": identity,
+                "sigma": identity
+            }
+            self.expectedNegativeReconstructionError = lambda x, x_theta, eps = 0.0: \
+                log_normal(x, x_theta["mu"], x_theta["sigma"], eps)
+            self.meanOfReconstructionDistribution = lambda x_theta: x_theta["mu"]
+            self.preprocess = lambda x: x
         
         # Models
     
@@ -100,7 +114,7 @@ class VAE(object):
         
         l_x_theta = {
             p: DenseLayer(l_dec, num_units = feature_shape,
-                nonlinearity = self.reconstruction_activation_functions,
+                nonlinearity = self.reconstruction_activation_functions[p],
                 name = 'DEC_X_' + p.upper()) for p in self.x_parameters
         }
         
@@ -163,13 +177,14 @@ class VAE(object):
 
         # Set the update function for parameters. The Adam optimizer works really well with VAEs.
         # updates = updates.adam(all_grads, all_params, learning_rate = 1e-3)
-        update_expressions = updates.adam(all_gradients, all_parameters, learning_rate = 1e-3)
+        update_expressions = updates.adam(all_gradients, all_parameters,
+            learning_rate = symbolic_learning_rate)
 
         # self.f_train = theano.function(inputs = [symbolic_x],
         #                           outputs = [LL_train, logpx_train, KL_train],
         #                           updates = updates)
         
-        self.f_train = theano.function(inputs = [symbolic_x],
+        self.f_train = theano.function(inputs = [symbolic_x, symbolic_learning_rate],
                                   outputs = [lower_bound_train, log_p_x_train, KL__train],
                                   updates = update_expressions)
         
@@ -201,7 +216,7 @@ class VAE(object):
         LL = - KL_qp + log_px_given_z
         return LL, log_px_given_z, KL_qp
     
-    def train(self, x_train, x_valid = None, N_epochs = 50, batch_size = 100):
+    def train(self, x_train, x_valid = None, N_epochs = 50, batch_size = 100, learning_rate = 1e-3):
         
         x_train = self.preprocess(x_train)
         x_valid = self.preprocess(x_valid)
@@ -229,7 +244,7 @@ class VAE(object):
             for i in range(0, N, batch_size):
                 subset = shuffled_indices[i:(i + batch_size)]
                 x_batch = x_train[subset]
-                out = self.f_train(x_batch)
+                out = self.f_train(x_batch, learning_rate)
             
             out = self.f_eval(x_train)
             LL_train += [out[0]] 
@@ -302,30 +317,21 @@ class VAE(object):
         
         x_test = self.preprocess(x_test)
         
-        print("x_test", x_test.shape)
-        
         lower_bound_test, _, _ = self.f_eval(x_test)
         
         print("Lower bound for test set: {:.4g}.".format(float(lower_bound_test)))
         
         z_eval = self.f_z(x_test)[0]
-        print("z_eval", z_eval.shape)
         
         x_theta_sample = self.f_sample(numpy.random.normal(size = (100,
             self.latent_size)).astype('float32'))
         x_theta_sample = {p: o for p, o in zip(self.x_parameters, x_theta_sample)}
         x_sample = self.meanOfReconstructionDistribution(x_theta_sample)
         
-        for variable_name, variable in x_theta_sample.items():
-            print(variable_name, variable.shape)
-        
         x_test_recon = self.f_recon(x_test)
         x_test_recon = {p: o for p, o in zip(self.x_parameters, x_test_recon)}
         x_test_recon["mean"] = self.meanOfReconstructionDistribution(x_test_recon)
         
-        for variable_name, variable in x_test_recon.items():
-            print(variable_name, variable.shape)
-            
         metrics = {
             "LL_test": lower_bound_test
         }
@@ -339,7 +345,7 @@ class VAE(object):
     #     LL = - KL_qp + log_px_given_z
     #     return LL, log_px_given_z, KL_qp
 
-def log_negative_binomial(x, log_r, p, eps = 0.0, approximation = "simple"):
+def log_negative_binomial(x, p, log_r, eps = 0.0, approximation = "simple"):
     """
     Compute log pdf of a negative binomial distribution with success probability p and number of failures, r, until the experiment is stopped, at values x.
     
@@ -361,11 +367,73 @@ def log_negative_binomial(x, log_r, p, eps = 0.0, approximation = "simple"):
 def meanOfNegativeBinomialDistribution(p, log_r):
     return p * numpy.exp(log_r) / (1 - p)
 
+def log_zero_inflated_poisson(x, pi, log_lambda, eps = 0.0, approximation = "simple"):
+    """
+    Compute log pdf of a zero-inflated Poisson distribution with success probability pi and number of failures, r, until the experiment is stopped, at values x.
+    
+    A simple variation of Stirling's approximation is used: log x! = x log x - x.
+    """
+    
+    x = T.clip(x, eps, x)
+    
+    pi = T.clip(pi, eps, 1.0 - eps)
+    
+    lambda_ = T.exp(log_lambda)
+    lambda_ = T.clip(lambda_, eps, lambda_)
+    
+    y_0 = T.log(pi + (1 - pi) * T.exp(-lambda_))
+    y_1 = T.log(1 - pi) + x * log_lambda - lambda_ - T.gammaln(x + 1)
+    # y_1 = T.log(1 - pi) + x * T.log(lambda_) - lambda_ - T.gammaln(x + 1)
+    
+    y = T.eq(x, eps) * y_0 + T.gt(x, eps) * y_1
+    
+    return y
+
+reconstruction_distributions = {
+    "negative_binomial": {
+        "parameters": ["p", "log_r"],
+        "activation functions": {
+            # "p": sigmoid,
+            "p": lambda x: T.clip(sigmoid(x), 0, 0.99),
+            "log_r": lambda x: T.clip(x, -10, 10)
+        },
+        "function": lambda x, x_theta, eps = 0.0: \
+            log_negative_binomial(x, x_theta["p"], x_theta["log_r"], eps),
+        "mean": lambda x_theta: \
+            meanOfNegativeBinomialDistribution(x_theta["p"], x_theta["log_r"]),
+        "preprocess": lambda x: x
+    },
+    
+    "bernoulli": {
+        "parameters": ["p"],
+        "activation functions": {
+            "p": sigmoid,
+        },
+        "function": lambda x, x_theta, eps = 0.0: \
+            log_bernoulli(x, x_theta["p"], eps),
+        "mean": lambda x_theta: x_theta["p"],
+        # Bernouilli sample?
+        "preprocess": lambda x: (x != 0).astype('float32')
+    },
+    
+    "zero_inflated_poisson": {
+        "parameters": ["pi", "log_lambda"],
+        "activation functions": {
+            "pi": sigmoid,
+            "log_lambda": lambda x: T.clip(x, -10, 10)
+        },
+        "function": lambda x, x_theta, eps = 0.0: \
+            log_zero_inflated_poisson(x, x_theta["pi"], x_theta["log_lambda"], eps),
+        "mean": lambda x_theta: (1 - x_theta["pi"]) * numpy.exp(x_theta["log_lambda"]),
+        "preprocess": lambda x: x
+    }
+}
+
 if __name__ == '__main__':
     (training_set, training_headers), (validation_set, validation_headers), \
         (test_set, test_headers) = data.loadCountData("sample")
     feature_size = training_set.shape[1]
-    model = VAE(feature_size, latent_size = 2, hidden_structure = [5])
+    model = VariationalAutoEncoder(feature_size, latent_size = 2, hidden_structure = [5], reconstruction_distribution = "negative_binomial")
     model.train(training_set, validation_set, N_epochs = 1, batch_size = 1)
     model.save("test")
     model.load("test")

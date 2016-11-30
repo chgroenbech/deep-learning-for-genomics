@@ -82,10 +82,10 @@ def loadSplitDataSets(name, filtering_method, feature_selection, feature_size,
     
     split_data_sets_name = name
     if filtering_method:
-        split_data_sets_name += "_f_" + filtering_method
+        split_data_sets_name += "_f_" + filtering_method.replace(" ", "_")
     if feature_selection:
-        split_data_sets_name += "_fs_" + feature_selection + "_" + str(feature_size)
-    split_data_sets_name += "_s_" + splitting_method + "_" + str(splitting_fraction)
+        split_data_sets_name += "_fs_" + feature_selection.replace(" ", "_") + "_" + str(feature_size)
+    split_data_sets_name += "_s_" + splitting_method.replace(" ", "_") + "_" + str(splitting_fraction)
     split_data_sets_path = preprocessed_path(split_data_sets_name +
         zipped_pickle_extension)
     
@@ -119,8 +119,8 @@ def loadFeatureSelectedDataSet(name, filtering_method, feature_selection, featur
     
     feature_selected_data_set_name = name
     if filtering_method:
-        feature_selected_data_set_name += "_f_" + filtering_method
-    feature_selected_data_set_name += "_fs_" + feature_selection + "_" + \
+        feature_selected_data_set_name += "_f_" + filtering_method.replace(" ", "_")
+    feature_selected_data_set_name += "_fs_" + feature_selection.replace(" ", "_") + "_" + \
         str(feature_size)
     feature_selected_data_set_path = \
         preprocessed_path(feature_selected_data_set_name + zipped_pickle_extension)
@@ -146,7 +146,7 @@ def loadFeatureSelectedDataSet(name, filtering_method, feature_selection, featur
 
 def loadFilteredDataSet(name, filtering_method):
     
-    filtered_data_set_name = name + "_f_" + filtering_method
+    filtered_data_set_name = name + "_f_" + filtering_method.replace(" ", "_")
     filtered_data_set_path = preprocessed_path(filtered_data_set_name +
         zipped_pickle_extension)
     
@@ -372,8 +372,8 @@ def saveSparseData(data, headers, file_path):
         pickle.dump(headers, data_file)
 
 def modelName(base_name, filtering_method, feature_selection, feature_size,
-    splitting_method, splitting_fraction, latent_size, hidden_structure,
-    batch_size, number_of_epochs):
+    splitting_method, splitting_fraction, reconstruction_distribution, latent_size,
+    hidden_structure, learning_rate, batch_size, number_of_epochs):
     
     model_name = base_name
     
@@ -387,9 +387,12 @@ def modelName(base_name, filtering_method, feature_selection, feature_size,
     model_name += "_s_" + splitting_method.replace(" ", "_") + "_" \
         + str(splitting_fraction)
     
+    model_name += "_r_" + reconstruction_distribution.replace(" ", "_")
+    
     model_name += "_l_" + str(latent_size) + "_h_" + "_".join(map(str,
         hidden_structure))
     
+    model_name += "_lr_{:.1g}".format(learning_rate) 
     model_name += "_b_" + str(batch_size) + "_e_" + str(number_of_epochs)
     
     return model_name

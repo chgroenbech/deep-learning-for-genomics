@@ -13,8 +13,8 @@ random.seed(42)
 def main(data_name, cluster_name, latent_size, hidden_structure,
     splitting_method = "random", splitting_fraction = 0.8,
     filtering_method = None, feature_selection = None, feature_size = None,
-    number_of_epochs = 10, batch_size = 100, learning_rate = 1e-3,
-    force_training = False):
+    reconstruction_distribution = None,  number_of_epochs = 10, batch_size = 100,
+    learning_rate = 1e-3, force_training = False):
     
     # Data
     
@@ -43,10 +43,11 @@ def main(data_name, cluster_name, latent_size, hidden_structure,
     feature_size = training_set.shape[1]
     
     model_name = data.modelName("vae", filtering_method, feature_selection,
-        feature_size, splitting_method, splitting_fraction, latent_size,
-        hidden_structure, batch_size, number_of_epochs)
+        feature_size, splitting_method, splitting_fraction, reconstruction_distribution,
+        latent_size, hidden_structure, learning_rate, batch_size, number_of_epochs)
     
-    model = modeling.VAE(feature_size, latent_size, hidden_structure)
+    model = modeling.VariationalAutoEncoder(feature_size, latent_size, hidden_structure,
+        reconstruction_distribution)
     
     previous_model_name, epochs_still_to_train = \
         data.findPreviouslyTrainedModel(model_name)
@@ -57,11 +58,13 @@ def main(data_name, cluster_name, latent_size, hidden_structure,
         model.load(previous_model_name)
         if epochs_still_to_train > 0:
             model.train(training_set, validation_set,
-                N_epochs = epochs_still_to_train, batch_size = batch_size)
+                N_epochs = epochs_still_to_train, batch_size = batch_size,
+                learning_rate = learning_rate)
             model.save(name = model_name, metadata = metadata)
     else:
         model.train(training_set, validation_set,
-            N_epochs = number_of_epochs, batch_size = batch_size)
+            N_epochs = number_of_epochs, batch_size = batch_size,
+            learning_rate = learning_rate)
         model.save(name = model_name, metadata = metadata)
     
     print("")
@@ -101,6 +104,8 @@ parser.add_argument("--feature-selection", metavar = "selection", type = str,
     help = "selection of features to use")
 parser.add_argument("--feature-size", metavar = "size", type = int,
     help = "size of feature space")
+parser.add_argument("--reconstruction-distribution", metavar = "distribution", type = str,
+    help = "distribution for the reconstructions")
 parser.add_argument("--number-of-epochs", metavar = "N", type = int, default = 10,
     help = "number of epochs for which to train")
 parser.add_argument("--batch-size", metavar = "B", type = int, default = 100,
