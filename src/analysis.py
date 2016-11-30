@@ -46,10 +46,26 @@ def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
         {"data_set": x_test, "name": "Test", "tolerance": 0.5},
         {"data_set": x_test_recon["mean"], "name": "Reconstructed",
          "tolerance": 0.5},
-        {"data_set": x_test_recon["p"], "name": "p"},
-        {"data_set": exp(x_test_recon["log_r"]), "name": "r"}
     ]
+    
+    for variable_name in x_test_recon:
+        
+        if variable_name == "mean":
+            continue
+        
+        if "log" in variable_name:
+            variable = exp(x_test_recon[variable_name])
+        else:
+            variable = x_test_recon[variable_name]
+        
+        variable_name = variable_name.replace("log_", "")
+        
+        data_set = {"data_set": variable, "name": variable_name}
+        data_sets.append(data_set)
+    
     printSummaryStatistics([statistics(**data_set) for data_set in data_sets])
+    
+    print("")
     
     if intensive_calculations:
         print("Creating heat maps.")
@@ -78,21 +94,17 @@ def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
         cell_test_name = name + "_cell_{}_test".format(j)
         plotProfile(cell_test, cell_test_name)
         
-        cell_recon = x_test_recon["mean"][i]
-        cell_recon_name = name + "_cell_{}_recon_mean".format(j)
-        plotProfile(cell_recon, cell_recon_name)
+        for variable_name in x_test_recon:
+            
+            cell_recon = x_test_recon[variable_name][i]
+            cell_recon_name = name + "_cell_{}_recon_{}".format(j, variable_name)
+            plotProfile(cell_recon, cell_recon_name)
+            
+            if variable_name == "mean":
+                cell_diff = cell_test - cell_recon
+                cell_diff_name = name + "_cell_{}_diff".format(j)
+                plotProfile(cell_diff, cell_diff_name)
         
-        cell_recon_p = x_test_recon["p"][i]
-        cell_recon_p_name = name + "_cell_{}_recon_p".format(j)
-        plotProfile(cell_recon_p, cell_recon_p_name)
-        
-        cell_recon_log_r = x_test_recon["log_r"][i]
-        cell_recon_log_r_name = name + "_cell_{}_recon_log_r".format(j)
-        plotProfile(cell_recon_log_r, cell_recon_log_r_name)
-        
-        cell_diff = cell_test - cell_recon
-        cell_diff_name = name + "_cell_{}_diff".format(j)
-        plotProfile(cell_diff, cell_diff_name)
 
 def statistics(data_set, name = "", tolerance = 1e-3):
     

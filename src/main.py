@@ -70,7 +70,7 @@ def main(data_name, cluster_name, latent_size, hidden_structure,
     
     analysis.analyseModel(model, name = model_name)
     
-    reconstructed_test_set, latent_set, sample_set, test_metrics = \
+    test_set, reconstructed_test_set, latent_set, sample_set, test_metrics = \
         model.evaluate(test_set)
     
     analysis.analyseResults(test_set, reconstructed_test_set, test_headers,
