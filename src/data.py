@@ -5,7 +5,7 @@ import pickle
 import os
 
 from pandas import read_csv
-from numpy import random, array, zeros, nonzero, sort, argsort
+from numpy import random, array, zeros, nonzero, sort, argsort, where
 from scipy.sparse import csr_matrix
 
 from seaborn import despine
@@ -21,11 +21,14 @@ zipped_pickle_extension = ".pkl.gz"
 
 script_directory()
 
-def loadCountData(name, filtering_method = None, feature_selection = None,
+def loadCountData(name, filtering_method = None, clusters = None, feature_selection = None,
     feature_size = None, splitting_method = "random", splitting_fraction = 0.8):
     
-    if filtering_method == splitting_method:
-        raise Error("Splitting and filtering method cannot be the same.")
+    if filtering_method:
+        if filtering_method[0] == splitting_method:
+            raise Error("Splitting and filtering method cannot be the same.")
+        if filtering_method[0] == "clusters":
+            filtering_method[1:] = [clusters[int(c)] for c in filtering_method[1:]]
     
     if name == "sample":
         data_set = createSampleData()
@@ -82,7 +85,7 @@ def loadSplitDataSets(name, filtering_method, feature_selection, feature_size,
     
     split_data_sets_name = name
     if filtering_method:
-        split_data_sets_name += "_f_" + filtering_method.replace(" ", "_")
+        split_data_sets_name += "_f_" + filtering_method[0].replace(" ", "_")
     if feature_selection:
         split_data_sets_name += "_fs_" + feature_selection.replace(" ", "_") + "_" + str(feature_size)
     split_data_sets_name += "_s_" + splitting_method.replace(" ", "_") + "_" + str(splitting_fraction)
@@ -119,7 +122,7 @@ def loadFeatureSelectedDataSet(name, filtering_method, feature_selection, featur
     
     feature_selected_data_set_name = name
     if filtering_method:
-        feature_selected_data_set_name += "_f_" + filtering_method.replace(" ", "_")
+        feature_selected_data_set_name += "_f_" + filtering_method[0].replace(" ", "_")
     feature_selected_data_set_name += "_fs_" + feature_selection.replace(" ", "_") + "_" + \
         str(feature_size)
     feature_selected_data_set_path = \
@@ -146,7 +149,7 @@ def loadFeatureSelectedDataSet(name, filtering_method, feature_selection, featur
 
 def loadFilteredDataSet(name, filtering_method):
     
-    filtered_data_set_name = name + "_f_" + filtering_method.replace(" ", "_")
+    filtered_data_set_name = name + "_f_" + filtering_method[0].replace(" ", "_")
     filtered_data_set_path = preprocessed_path(filtered_data_set_name +
         zipped_pickle_extension)
     
@@ -217,13 +220,25 @@ def filterExamples(data, headers = None, filtering_method = None):
     
     N = data.shape[0]
     
-    if filtering_method == "Macosko":
+    if filtering_method[0] == "Macosko":
         
         minimum_genes_expressed = 900
         
         N_non_zero_elements = (data != 0).sum(axis = 1)
         
         index_examples = nonzero(N_non_zero_elements > minimum_genes_expressed)[0]
+    
+    elif filtering_method[0] == "clusters":
+        
+        index_examples = []
+            
+        for cluster in filtering_method[1:]:
+            
+            for cell in cluster:
+                index = where(headers["cells"] == cell)[0]
+                if len(index) == 0:
+                    continue
+                index_examples.append(int(index))
     
     elif filtering_method is None:
         index_examples = slice(N)
@@ -378,7 +393,7 @@ def modelName(base_name, filtering_method, feature_selection, feature_size,
     model_name = base_name
     
     if filtering_method:
-        model_name += "_f_" + filtering_method.replace(" ", "_")
+        model_name += "_f_" + filtering_method[0].replace(" ", "_")
     
     if feature_selection:
         model_name += "_fs_" + feature_selection.replace(" ", "_") + "_" \
@@ -410,9 +425,11 @@ def saveModel(model, model_name):
 
 def loadModel(model_name):
     
+    epoch = model_name.split("_e_")[-1]
+    
     model_path = models_path(model_name + zipped_pickle_extension)
     
-    print("Loading model parameters and metadata.")
+    print("Loading model parameters for epoch {} and metadata.".format(epoch))
     
     with gzip.open(model_path, "rb") as model_file:
         model = pickle.load(model_file)
@@ -506,5 +523,3 @@ cluster_colours = {
 
 if __name__ == '__main__':
     script_directory()
-    name = "retina_clusteridentities"
-    clusters = loadClusterData(name)

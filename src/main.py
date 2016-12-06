@@ -18,12 +18,12 @@ def main(data_name, cluster_name, splitting_method = "random", splitting_fractio
     
     # Data
     
+    clusters = data.loadClusterData(cluster_name)
+    
     (training_set, training_headers), (validation_set, validation_headers), \
         (test_set, test_headers) = data.loadCountData(data_name,
-        filtering_method, feature_selection, feature_size,
+        filtering_method, clusters, feature_selection, feature_size,
         splitting_method, splitting_fraction)
-    
-    clusters = data.loadClusterData(cluster_name)
     
     metadata = {
         "filtering method": filtering_method,
@@ -68,6 +68,7 @@ def main(data_name, cluster_name, splitting_method = "random", splitting_fractio
         if previous_model_name and not force_training:
             model.load(previous_model_name)
             if epochs_still_to_train > 0:
+                print("")
                 model.train(training_set, validation_set,
                     N_epochs = epochs_still_to_train, batch_size = batch_size,
                     learning_rate = learning_rate)
@@ -108,7 +109,7 @@ parser.add_argument("--latent-sizes", metavar = "size", nargs = '+', type = int,
 parser.add_argument("--hidden-structure", metavar = "sizes", nargs = '+',
     type = int, help = "structure of hidden layers")
 parser.add_argument("--filtering-method", metavar = "method", type = str,
-    help = "method for filtering examples")
+    nargs = '+', help = "method for filtering examples")
 parser.add_argument("--splitting-method", metavar = "method", type = str,
     default = "random", 
     help = "method for splitting data into training,   validation, and test sets")
