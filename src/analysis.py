@@ -5,8 +5,10 @@ import data
 from matplotlib import pyplot
 import seaborn
 
-from numpy import linspace, random, nonzero, where, inf, log, exp, empty
+from numpy import linspace, random, nonzero, where, inf, log, exp, empty, arange
 from sklearn.decomposition import PCA
+
+from aux import labelWithDefaultSymbol
 
 palette = seaborn.color_palette('Set2', 8)
 seaborn.set(style='ticks', palette = palette)
@@ -93,20 +95,22 @@ def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
         
         print("Creating profiles for cell {}.".format(x_test_headers["cells"][i]))
         
+        label = labelWithDefaultSymbol("x")
+        
         cell_test = x_test[i]
         cell_test_name = name + "/cell_{}_test".format(j)
-        plotProfile(cell_test, cell_test_name)
+        plotProfile(cell_test, label(), cell_test_name)
         
         for variable_name in x_test_recon:
             
             cell_recon = x_test_recon[variable_name][i]
             cell_recon_name = name + "/cell_{}_recon_{}".format(j, variable_name)
-            plotProfile(cell_recon, cell_recon_name)
+            plotProfile(cell_recon, label(variable_name), cell_recon_name)
             
             if variable_name == "mean":
                 cell_diff = cell_test - cell_recon
                 cell_diff_name = name + "/cell_{}_diff".format(j)
-                plotProfile(cell_diff, cell_diff_name)
+                plotProfile(cell_diff, label() + "$-$" + label(variable_name), cell_diff_name)
         
 
 def statistics(data_set, name = "", tolerance = 1e-3):
@@ -151,7 +155,12 @@ def printSummaryStatistics(statistics_sets):
         
         print("  ".join(string_parts))
 
-def plotProfile(cell, name = None):
+def plotProfile(cell, label, name = None):
+    
+    figure_name = "profile"
+    
+    if name:
+        figure_name = name + "_" + figure_name
     
     D = cell.shape[0]
     
@@ -162,10 +171,8 @@ def plotProfile(cell, name = None):
     # axis.bar(x, cell)
     axis.plot(x, cell)
     
-    figure_name = "profile"
-    
-    if name:
-        figure_name = name + "_" + figure_name
+    axis.set_xlabel("Cell")
+    axis.set_ylabel(label)
     
     data.saveFigure(figure, figure_name)
 
@@ -193,6 +200,9 @@ def plotHeatMap(data_set, data_set_headers = None, clusters = None, name = None)
             
             N_subset = len(subset)
             
+            if N_subset == 0:
+                continue
+            
             sorted_data_set[N_seen:(N_seen + N_subset)] = data_set[subset]
         
             N_seen += N_subset
@@ -202,15 +212,26 @@ def plotHeatMap(data_set, data_set_headers = None, clusters = None, name = None)
     
     N, M = data_set.shape
     
-    figure = pyplot.figure(figsize = (N/500, M/500))
+    # figure = pyplot.figure(figsize = (N/500, M/500))
+    figure = pyplot.figure()
     axis = figure.add_subplot(1, 1, 1)
     
     seaborn.heatmap(data_set.T, xticklabels = False, yticklabels = False, cbar = True,
         square = True, ax = axis)
     
+    axis.set_xlabel("Cell")
+    axis.set_ylabel("Gene")
+    
     data.saveFigure(figure, figure_name, no_spine = False)
 
 def plotLearningCurves(curves, name = None):
+    
+    figure_1_name = "learning_curves"
+    figure_2_name = "learning_curves_KL"
+    
+    if name:
+        figure_1_name = name + "/" + figure_1_name
+        figure_2_name = name + "/" + figure_2_name
     
     figure_1 = pyplot.figure()
     axis_1 = figure_1.add_subplot(1, 1, 1)
@@ -233,33 +254,44 @@ def plotLearningCurves(curves, name = None):
             elif curve_name == "KL divergence":
                 line_style = "dashed"
                 axis = axis_2
+            epochs = arange(len(curve)) + 1
             label = curve_name + " ({} set)".format(curve_set_name)
             axis.plot(curve, color = colour, linestyle = line_style, label = label)
     
     axis_1.legend(loc = "best")
+    axis_2.legend(loc = "best")
     
-    figure_1_name = "learning_curves"
+    axis_1.set_xlabel("Epoch")
+    axis_2.set_xlabel("Epoch")
     
-    if name:
-        figure_1_name = name + "/" + figure_1_name
+    # axis_1.set_ylabel("Learning curve")
+    # axis_2.set_ylabel("KL divergence")
     
     data.saveFigure(figure_1, figure_1_name)
-    
-    figure_2_name = "learning_curves_KL"
-    
-    if name:
-        figure_2_name = name + "/" + figure_2_name
-    
     data.saveFigure(figure_2, figure_2_name)
 
 def plotLatentSpace(latent_set, latent_set_headers = None, clusters = None, name = None):
     
+    figure_name = "latent_space"
+    
+    if name:
+        figure_name = name + "/" + figure_name
+    
+    N, M = latent_set.shape
+    
     figure = pyplot.figure()
     axis = figure.add_subplot(1, 1, 1)
     
-    pca = PCA(n_components = 2)
-    pca.fit(latent_set)
-    latent_set_pc = pca.transform(latent_set)
+    if M > 2:
+        pca = PCA(n_components = 2)
+        pca.fit(latent_set)
+        latent_set = pca.transform(latent_set)
+        
+        axis.set_xlabel("PC 1")
+        axis.set_ylabel("PC 2")
+    else:
+        axis.set_xlabel("z_1")
+        axis.set_ylabel("z_2")
     
     for cluster_id in clusters:
         
@@ -272,14 +304,15 @@ def plotLatentSpace(latent_set, latent_set_headers = None, clusters = None, name
             if len(index) == 0:
                 continue
             subset.append(int(index))
+        
+        if len(subset) == 0:
+            continue
+        
+        axis.scatter(latent_set[subset, 0], latent_set[subset, 1],
+            c = data.cluster_colours[cluster_id], edgecolors = None,
+            label = cluster_id)
     
-        axis.scatter(latent_set_pc[subset, 0], latent_set_pc[subset, 1],
-            c = data.cluster_colours[cluster_id], edgecolors = None)
-    
-    figure_name = "latent_space"
-    
-    if name:
-        figure_name = name + "/" + figure_name
+    axis.legend(loc="best")
     
     data.saveFigure(figure, figure_name)
 

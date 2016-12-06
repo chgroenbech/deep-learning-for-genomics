@@ -49,6 +49,35 @@ preprocessed_path = savepath(path='../data/preprocessed')
 models_path = savepath(path='../data/models')
 result_path = savepath(path='../data/results')
 
+# Math
+
+math_functions = ["log", "exp", "sin", "cos", "tan", "tanh"]
+greek_letters = [
+    "alpha", "beta", "gamma", "Gamma", "delta", "Delta", "epsilon", "zeta", 
+    "eta", "theta", "Theta", "iota", "kappa", "lambda", "Lambda", "mu", 
+    "nu", "xi", "Xi", "omicron", "pi", "Pi", "rho", "sigma", "Sigma", "tau", 
+    "upsilon", "phi", "Phi", "chi", "psi", "Psi", "omega", "Omega"
+]
+
+def labelWithDefaultSymbol(default_symbol):
+    def label_function(symbol = None):
+        if not symbol:
+            return "${}$".format(default_symbol)
+        elif symbol == "mean":
+            return "$\\bar{}$".format(default_symbol)
+        else:
+            symbol_parts = symbol.split("_")
+            symbol_string = "$"
+            for symbol_part in symbol_parts:
+                if symbol_part in math_functions or symbol_part in greek_letters:
+                    symbol_string += "\\" + symbol_part
+                else:
+                    symbol_string += symbol_part
+            symbol_string += "$"
+            return symbol_string
+    
+    return label_function
+
 # Helper functions
 def enumerate_reversed(a_list, start = -1):
     return izip(count(len(a_list) + start, -1), reversed(a_list))
