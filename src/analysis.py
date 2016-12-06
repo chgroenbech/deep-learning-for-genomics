@@ -5,7 +5,7 @@ import data
 from matplotlib import pyplot
 import seaborn
 
-from numpy import linspace, random, nonzero, where, inf, log, exp
+from numpy import linspace, random, nonzero, where, inf, log, exp, empty
 from sklearn.decomposition import PCA
 
 palette = seaborn.color_palette('Set2', 8)
@@ -71,16 +71,19 @@ def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
         print("Creating heat maps.")
         
         test_set_name = name + "/test"
-        plotHeatMap(x_test, test_set_name)
+        plotHeatMap(x_test, x_test_headers, clusters, name = test_set_name)
         
         reconstructed_test_set_name = name + "/test_recon"
-        plotHeatMap(x_test_recon["mean"], reconstructed_test_set_name)
+        plotHeatMap(x_test_recon["mean"], x_test_headers, clusters,
+            name = reconstructed_test_set_name)
         
         difference_name = name + "/test_difference"
-        plotHeatMap(x_test - x_test_recon["mean"], difference_name)
+        plotHeatMap(x_test - x_test_recon["mean"], x_test_headers, clusters,
+            name = difference_name)
         
         log_ratio_name = name + "/test_log_ratio"
-        plotHeatMap(log(x_test / x_test_recon["mean"] + 1), log_ratio_name)
+        plotHeatMap(log(x_test / x_test_recon["mean"] + 1), x_test_headers, clusters,
+            name = log_ratio_name)
     
     print("Creating latent space scatter plot.")
     plotLatentSpace(latent_set, x_test_headers, clusters, name)
@@ -148,7 +151,7 @@ def printSummaryStatistics(statistics_sets):
         
         print("  ".join(string_parts))
 
-def plotProfile(cell, name):
+def plotProfile(cell, name = None):
     
     D = cell.shape[0]
     
@@ -159,20 +162,55 @@ def plotProfile(cell, name):
     # axis.bar(x, cell)
     axis.plot(x, cell)
     
-    figure_name = name + "_profile"
+    figure_name = "profile"
+    
+    if name:
+        figure_name = name + "_" + figure_name
+    
     data.saveFigure(figure, figure_name)
 
-def plotHeatMap(data_set, name):
+def plotHeatMap(data_set, data_set_headers = None, clusters = None, name = None):
     
-    figure = pyplot.figure()
+    figure_name = "heat_map"
+    
+    if name:
+        figure_name = name + "_" + figure_name
+    
+    if data_set_headers and clusters:
+    
+        sorted_data_set = empty(data_set.shape)
+    
+        N_seen = 0
+        for cluster_id, cluster in sorted(clusters.items()):
+            
+            subset = []
+            
+            for cell in cluster:
+                index = where(data_set_headers["cells"] == cell)[0]
+                if len(index) == 0:
+                    continue
+                subset.append(int(index))
+            
+            N_subset = len(subset)
+            
+            sorted_data_set[N_seen:(N_seen + N_subset)] = data_set[subset]
+        
+            N_seen += N_subset
+        
+        data_set = sorted_data_set[:N_seen]
+        figure_name += "_sorted"
+    
+    N, M = data_set.shape
+    
+    figure = pyplot.figure(figsize = (N/500, M/500))
     axis = figure.add_subplot(1, 1, 1)
     
-    seaborn.heatmap(data_set.T, xticklabels = False, yticklabels = False, cbar = True, square = True, ax = axis)
+    seaborn.heatmap(data_set.T, xticklabels = False, yticklabels = False, cbar = True,
+        square = True, ax = axis)
     
-    figure_name = name + "_heat_map"
     data.saveFigure(figure, figure_name, no_spine = False)
 
-def plotLearningCurves(curves, name):
+def plotLearningCurves(curves, name = None):
     
     figure_1 = pyplot.figure()
     axis_1 = figure_1.add_subplot(1, 1, 1)
@@ -193,20 +231,28 @@ def plotLearningCurves(curves, name):
                 line_style = "dashed"
                 axis = axis_1
             elif curve_name == "KL divergence":
-                line_style = "dotted"
+                line_style = "dashed"
                 axis = axis_2
             label = curve_name + " ({} set)".format(curve_set_name)
             axis.plot(curve, color = colour, linestyle = line_style, label = label)
     
     axis_1.legend(loc = "best")
     
-    figure_1_name = name + "/learning_curves"
+    figure_1_name = "learning_curves"
+    
+    if name:
+        figure_1_name = name + "/" + figure_1_name
+    
     data.saveFigure(figure_1, figure_1_name)
     
-    figure_2_name = name + "/learning_curves_KL"
+    figure_2_name = "learning_curves_KL"
+    
+    if name:
+        figure_2_name = name + "/" + figure_2_name
+    
     data.saveFigure(figure_2, figure_2_name)
 
-def plotLatentSpace(latent_set, x_test_headers, clusters, name):
+def plotLatentSpace(latent_set, latent_set_headers = None, clusters = None, name = None):
     
     figure = pyplot.figure()
     axis = figure.add_subplot(1, 1, 1)
@@ -221,7 +267,7 @@ def plotLatentSpace(latent_set, x_test_headers, clusters, name):
         subset = []
     
         for cell in cluster:
-            index = where(x_test_headers["cells"] == cell)[0]
+            index = where(latent_set_headers["cells"] == cell)[0]
             # print(index) # cells in headers, and hence in test set, are clustered
             if len(index) == 0:
                 continue
@@ -230,7 +276,11 @@ def plotLatentSpace(latent_set, x_test_headers, clusters, name):
         axis.scatter(latent_set_pc[subset, 0], latent_set_pc[subset, 1],
             c = data.cluster_colours[cluster_id], edgecolors = None)
     
-    figure_name = name + "/latent_space"
+    figure_name = "latent_space"
+    
+    if name:
+        figure_name = name + "/" + figure_name
+    
     data.saveFigure(figure, figure_name)
 
 if __name__ == '__main__':
