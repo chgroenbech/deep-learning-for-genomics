@@ -36,6 +36,14 @@ class VariationalAutoEncoder(object):
         super(VariationalAutoEncoder, self).__init__()
         
         print("Setting up model.")
+        print("    feature size: {}".format(feature_shape))
+        print("    latent size: {}".format(latent_size))
+        print("    hidden structure: {}".format(", ".join(map(str, hidden_structure))))
+        if type(reconstruction_distribution) == str:
+            print("    reconstruction distribution: " + reconstruction_distribution)
+        else:
+            print("    reconstruction distribution: custom")
+        print("")
         
         self.feature_shape = feature_shape
         self.latent_size = latent_size
@@ -224,7 +232,9 @@ class VariationalAutoEncoder(object):
         training_string = "Training model for {}".format(N_epochs)
         if self.number_of_epochs_trained > 0:
             training_string += " additional"
-        training_string += " epoch{}.".format("s" if N_epochs > 1 else "")
+        training_string += " epoch{}".format("s" if N_epochs > 1 else "")
+        training_string += " with a learning rate of {:.3g}".format(learning_rate)
+        training_string += "."
         print(training_string)
         
         LL_train, logpx_train, KL_train = [], [], []
