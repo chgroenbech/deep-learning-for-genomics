@@ -7,14 +7,14 @@ import analysis
 import argparse
 
 from numpy import random
+from itertools import product
 
-random.seed(42)
-
-def main(data_name, cluster_name, latent_size, hidden_structure,
-    splitting_method = "random", splitting_fraction = 0.8,
+def main(data_name, cluster_name, splitting_method = "random", splitting_fraction = 0.8,
     filtering_method = None, feature_selection = None, feature_size = None,
-    reconstruction_distribution = None,  number_of_epochs = 10, batch_size = 100,
-    learning_rate = 1e-3, force_training = False):
+    latent_sizes = None, hidden_structure = None, reconstruction_distributions = None, 
+    numbers_of_epochs = 10, batch_size = 100, learning_rate = 1e-3, force_training = False):
+    
+    random.seed(42)
     
     # Data
     
@@ -38,47 +38,62 @@ def main(data_name, cluster_name, latent_size, hidden_structure,
     
     print("")
     
-    # Model
+    # Loop
     
     feature_size = training_set.shape[1]
     
-    model_name = data.modelName("vae", filtering_method, feature_selection,
-        feature_size, splitting_method, splitting_fraction, reconstruction_distribution,
-        latent_size, hidden_structure, learning_rate, batch_size, number_of_epochs)
+    if not hidden_structure:
+        hidden_structure = [feature_size / 10]
     
-    model = modeling.VariationalAutoEncoder(feature_size, latent_size, hidden_structure,
-        reconstruction_distribution)
+    if not latent_sizes:
+        latent_sizes = [feature_size / 100]
     
-    previous_model_name, epochs_still_to_train = \
-        data.findPreviouslyTrainedModel(model_name)
-    
-    print("")
-    
-    if previous_model_name and not force_training:
-        model.load(previous_model_name)
-        if epochs_still_to_train > 0:
+    for latent_size, reconstruction_distribution, number_of_epochs in \
+        product(latent_sizes, reconstruction_distributions, numbers_of_epochs):
+        
+        # Model
+        
+        model_name = data.modelName("vae", filtering_method, feature_selection,
+            feature_size, splitting_method, splitting_fraction, reconstruction_distribution,
+            latent_size, hidden_structure, learning_rate, batch_size, number_of_epochs)
+        
+        model = modeling.VariationalAutoEncoder(feature_size, latent_size, hidden_structure,
+            reconstruction_distribution)
+        
+        previous_model_name, epochs_still_to_train = \
+            data.findPreviouslyTrainedModel(model_name)
+        
+        print("")
+        
+        if previous_model_name and not force_training:
+            model.load(previous_model_name)
+            if epochs_still_to_train > 0:
+                model.train(training_set, validation_set,
+                    N_epochs = epochs_still_to_train, batch_size = batch_size,
+                    learning_rate = learning_rate)
+                model.save(name = model_name, metadata = metadata)
+        else:
             model.train(training_set, validation_set,
-                N_epochs = epochs_still_to_train, batch_size = batch_size,
+                N_epochs = number_of_epochs, batch_size = batch_size,
                 learning_rate = learning_rate)
             model.save(name = model_name, metadata = metadata)
-    else:
-        model.train(training_set, validation_set,
-            N_epochs = number_of_epochs, batch_size = batch_size,
-            learning_rate = learning_rate)
-        model.save(name = model_name, metadata = metadata)
-    
-    print("")
-    
-    # Analysis
-    
-    analysis.analyseModel(model, name = model_name)
-    
-    test_set, reconstructed_test_set, latent_set, sample_set, test_metrics = \
-        model.evaluate(test_set)
-    
-    analysis.analyseResults(test_set, reconstructed_test_set, test_headers,
-        clusters, latent_set, sample_set, name = model_name,
-        intensive_calculations = True)
+        
+        print("")
+        
+        # Analysis
+        
+        analysis.analyseModel(model, name = model_name)
+        
+        test_set, reconstructed_test_set, latent_set, sample_set, test_metrics = \
+            model.evaluate(test_set)
+        
+        analysis.analyseResults(test_set, reconstructed_test_set, test_headers,
+            clusters, latent_set, sample_set, name = model_name,
+            intensive_calculations = True)
+        
+        print("")
+
+
 
 parser = argparse.ArgumentParser(
     description='Model gene counts in single cells.',
@@ -88,8 +103,8 @@ parser.add_argument("--data-name", metavar = "name", type = str, default = "samp
     help = "data set name")
 parser.add_argument("--cluster-name", metavar = "name", type = str,
     help = "cluster name")
-parser.add_argument("--latent-size", metavar = "size", type = int,
-    help = "size of latent space")
+parser.add_argument("--latent-sizes", metavar = "size", nargs = '+', type = int,
+    help = "sizes of latent space for different models")
 parser.add_argument("--hidden-structure", metavar = "sizes", nargs = '+',
     type = int, help = "structure of hidden layers")
 parser.add_argument("--filtering-method", metavar = "method", type = str,
@@ -104,10 +119,10 @@ parser.add_argument("--feature-selection", metavar = "selection", type = str,
     help = "selection of features to use")
 parser.add_argument("--feature-size", metavar = "size", type = int,
     help = "size of feature space")
-parser.add_argument("--reconstruction-distribution", metavar = "distribution", type = str,
-    help = "distribution for the reconstructions")
-parser.add_argument("--number-of-epochs", metavar = "N", type = int, default = 10,
-    help = "number of epochs for which to train")
+parser.add_argument("--reconstruction-distributions", metavar = "distribution", type = str,
+    nargs = '+', help = "distributions for the reconstructions for different models")
+parser.add_argument("--numbers-of-epochs", metavar = "N", type = int, default = 10,
+    nargs = '+', help = "numbers of epochs for which to train and to save model parameters for")
 parser.add_argument("--batch-size", metavar = "B", type = int, default = 100,
     help = "batch size used when training")
 parser.add_argument("--learning-rate", metavar = "epsilon", type = float,
