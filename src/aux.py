@@ -28,18 +28,20 @@ def script_directory():
     os.chdir(sys.path[0])
 
 def savepath(path=None):
-    def format_function(fname='', path=path):
-        if not path.endswith('/'):
-            path = path + '/'
-        try:
-            if not os.path.exists(path):
-                os.mkdir(path)
-        except:
-            print('ERROR:', 'Failed to create path {}'.format(path))
-            path = './'
-        return (path + '{}').format(fname)
+	def format_function(file_path = "", base_path = path):
+		if not base_path.endswith(os.sep):
+			base_path = base_path + os.sep
+		file_name = os.path.realpath(base_path + file_path)
+		path, name = os.path.split(file_name)
+		try:
+			if not os.path.exists(path):
+				os.makedirs(path)
+		except:
+			print('ERROR:', 'Failed to create path {}'.format(path))
+			path = './'
+		return path + os.sep + name
 
-    return format_function
+	return format_function
 
 figures_path  = savepath(path='../fig')
 data_path = savepath(path='../data')
@@ -59,11 +61,20 @@ def convertTimeToString(seconds):
     elif seconds < 60 * 60:
         minutes = floor(seconds / 60)
         seconds = seconds % 60
+        if round(seconds) == 60:
+            seconds = 0
+            minutes += 1
         return "{:.0f}m {:.0f}s".format(minutes, seconds)
     else:
         hours = floor(seconds / 60 / 60)
         minutes = floor((seconds / 60) % 60)
         seconds = seconds % 60
+        if round(seconds) == 60:
+            seconds = 0
+            minutes += 1
+        if minutes == 60:
+            minutes = 0
+            hours += 1
         return "{:.0f}h {:.0f}m {:.0f}s".format(hours, minutes, seconds)
 
 # Shell output

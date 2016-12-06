@@ -21,13 +21,13 @@ def analyseData(data_set, name = "data", intensive_calculations = False):
         plotHeatMap(data_set, name)
     
     average_cell = data_set.mean(axis = 0)
-    average_cell_name = name + "_mean"
+    average_cell_name = name + "/mean"
     plotProfile(average_cell, average_cell_name)
     
     subset = random.randint(N, size = 10)
     for j, i in enumerate(subset):
         cell = data_set[i]
-        cell_name = name + "_cell_{}".format(j)
+        cell_name = name + "/cell_{}".format(j)
         plotProfile(cell, cell_name)
     
     # average_genes_per_cell = data_set.sum(axis = 1)
@@ -70,16 +70,16 @@ def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
     if intensive_calculations:
         print("Creating heat maps.")
         
-        test_set_name = name + "_test"
+        test_set_name = name + "/test"
         plotHeatMap(x_test, test_set_name)
         
-        reconstructed_test_set_name = name + "_test_recon"
+        reconstructed_test_set_name = name + "/test_recon"
         plotHeatMap(x_test_recon["mean"], reconstructed_test_set_name)
         
-        difference_name = name + "_test_difference"
+        difference_name = name + "/test_difference"
         plotHeatMap(x_test - x_test_recon["mean"], difference_name)
         
-        log_ratio_name = name + "_test_log_ratio"
+        log_ratio_name = name + "/test_log_ratio"
         plotHeatMap(log(x_test / x_test_recon["mean"] + 1), log_ratio_name)
     
     print("Creating latent space scatter plot.")
@@ -91,18 +91,18 @@ def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
         print("Creating profiles for cell {}.".format(x_test_headers["cells"][i]))
         
         cell_test = x_test[i]
-        cell_test_name = name + "_cell_{}_test".format(j)
+        cell_test_name = name + "/cell_{}_test".format(j)
         plotProfile(cell_test, cell_test_name)
         
         for variable_name in x_test_recon:
             
             cell_recon = x_test_recon[variable_name][i]
-            cell_recon_name = name + "_cell_{}_recon_{}".format(j, variable_name)
+            cell_recon_name = name + "/cell_{}_recon_{}".format(j, variable_name)
             plotProfile(cell_recon, cell_recon_name)
             
             if variable_name == "mean":
                 cell_diff = cell_test - cell_recon
-                cell_diff_name = name + "_cell_{}_diff".format(j)
+                cell_diff_name = name + "/cell_{}_diff".format(j)
                 plotProfile(cell_diff, cell_diff_name)
         
 
@@ -200,10 +200,10 @@ def plotLearningCurves(curves, name):
     
     axis_1.legend(loc = "best")
     
-    figure_1_name = name + "_learning_curves"
+    figure_1_name = name + "/learning_curves"
     data.saveFigure(figure_1, figure_1_name)
     
-    figure_2_name = name + "_learning_curves_KL"
+    figure_2_name = name + "/learning_curves_KL"
     data.saveFigure(figure_2, figure_2_name)
 
 def plotLatentSpace(latent_set, x_test_headers, clusters, name):
@@ -230,7 +230,7 @@ def plotLatentSpace(latent_set, x_test_headers, clusters, name):
         axis.scatter(latent_set_pc[subset, 0], latent_set_pc[subset, 1],
             c = data.cluster_colours[cluster_id], edgecolors = None)
     
-    figure_name = name + "_latent_space"
+    figure_name = name + "/latent_space"
     data.saveFigure(figure, figure_name)
 
 if __name__ == '__main__':
