@@ -117,16 +117,11 @@ class VariationalAutoEncoder(object):
         for i, hidden_size in enumerate(reversed(hidden_structure)):
             l_dec = DenseLayer(l_dec, num_units = hidden_size, nonlinearity = rectify, name = 'DEC_DENSE{:d}'.format(len(hidden_structure) - i))
         
-        # l_x_p = DenseLayer(l_dec, num_units = feature_shape, nonlinearity = sigmoid, name = 'DEC_X_P')
-        # l_x_log_r = DenseLayer(l_dec, num_units = feature_shape, nonlinearity = identity, name = 'DEC_X_LOG_R')
-        
         l_x_theta = {
             p: DenseLayer(l_dec, num_units = feature_shape,
                 nonlinearity = self.reconstruction_activation_functions[p],
                 name = 'DEC_X_' + p.upper()) for p in self.x_parameters
         }
-        
-        # self.decoder = {"p": l_x_p, "log_r": l_x_log_r}
         
         self.decoder = {p: l_x_theta[p] for p in self.x_parameters}
         
@@ -135,9 +130,6 @@ class VariationalAutoEncoder(object):
         ## Training outputs
         z_train, z_mu_train, z_log_var_train = get_output(
             [l_z, l_z_mu, l_z_log_var], {l_enc_in: symbolic_x}, deterministic = False)
-        # x_p_train, x_log_r_train = get_output(
-        #     [l_x_p, l_x_log_r], {l_dec_in: z_train}, deterministic = False)
-        
         x_theta_train = get_output([l_x_theta[p] for p in self.x_parameters], {l_dec_in: z_train},
             deterministic = False)
         x_theta_train = {p: o for p, o in zip(self.x_parameters, x_theta_train)}
@@ -145,16 +137,11 @@ class VariationalAutoEncoder(object):
         ## Evaluation outputs
         z_eval, z_mu_eval, z_log_var_eval = get_output(
             [l_z, l_z_mu, l_z_log_var], {l_enc_in: symbolic_x}, deterministic = True)
-        # x_p_eval, x_log_r_eval = get_output(
-        #     [l_x_p, l_x_log_r], {l_dec_in: z_eval}, deterministic = True)
-        
         x_theta_eval = get_output([l_x_theta[p] for p in self.x_parameters], {l_dec_in: z_eval},
             deterministic = True)
         x_theta_eval = {p: o for p, o in zip(self.x_parameters, x_theta_eval)}
         
         ## Sample outputs
-        # x_p_sample, x_log_r_sample = get_output([l_x_p, l_x_log_r], {l_dec_in: symbolic_z},
-        #     deterministic = True)
         
         x_theta_sample = get_output([l_x_theta[p] for p in self.x_parameters], {l_dec_in: symbolic_z},
             deterministic = True)
@@ -162,15 +149,10 @@ class VariationalAutoEncoder(object):
         
         # Likelihood
         
-        # LL_train, logpx_train, KL_train = self.logLikelihood(x_p_train, x_log_r_train, symbolic_x, z_mu_train, z_log_var_train)
-        # LL_eval, logpx_eval, KL_eval = self.logLikelihood(x_p_eval, x_log_r_eval, symbolic_x, z_mu_eval, z_log_var_eval)
-        
         lower_bound_train, log_p_x_train, KL__train = \
             self.lowerBound(symbolic_x, x_theta_train, z_mu_train, z_log_var_train)
         lower_bound_eval, log_p_x_eval, KL__eval = \
             self.lowerBound(symbolic_x, x_theta_eval, z_mu_eval, z_log_var_eval)
-        
-        # all_params = get_all_params([l_z, l_x_p, l_x_log_r], trainable = True)
         
         all_parameters = get_all_params([l_z] + [l_x_theta[p] for p in self.x_parameters], trainable = True)
         
@@ -179,43 +161,30 @@ class VariationalAutoEncoder(object):
             print("    {}: {}".format(parameter, parameter.get_value().shape))
         
         # Let Theano do its magic and get all the gradients we need for training
-        # all_grads = T.grad(-LL_train, all_params)
-        
         all_gradients = T.grad(-lower_bound_train, all_parameters)
 
         # Set the update function for parameters. The Adam optimizer works really well with VAEs.
-        # updates = updates.adam(all_grads, all_params, learning_rate = 1e-3)
         update_expressions = updates.adam(all_gradients, all_parameters,
             learning_rate = symbolic_learning_rate)
 
-        # self.f_train = theano.function(inputs = [symbolic_x],
-        #                           outputs = [LL_train, logpx_train, KL_train],
-        #                           updates = updates)
+        self.f_train = theano.function(
+            inputs = [symbolic_x, symbolic_learning_rate],
+            outputs = [lower_bound_train, log_p_x_train, KL__train],
+            updates = update_expressions)
         
-        self.f_train = theano.function(inputs = [symbolic_x, symbolic_learning_rate],
-                                  outputs = [lower_bound_train, log_p_x_train, KL__train],
-                                  updates = update_expressions)
+        self.f_eval = theano.function(
+            inputs = [symbolic_x],
+            outputs = [lower_bound_eval, log_p_x_eval, KL__eval])
         
-        # self.f_eval = theano.function(inputs = [symbolic_x],
-        #                          outputs = [LL_eval, logpx_eval, KL_eval])
+        self.f_z = theano.function(inputs = [symbolic_x], outputs = [z_eval])
         
-        self.f_eval = theano.function(inputs = [symbolic_x],
-                                 outputs = [lower_bound_eval, log_p_x_eval, KL__eval])
+        self.f_sample = theano.function(
+            inputs = [symbolic_z],
+            outputs = [x_theta_sample[p] for p in self.x_parameters])
         
-        self.f_z = theano.function(inputs = [symbolic_x],
-                                 outputs = [z_eval])
-        
-        # self.f_sample = theano.function(inputs = [symbolic_z],
-        #                          outputs = [x_p_sample, x_log_r_sample])
-        
-        self.f_sample = theano.function(inputs = [symbolic_z],
-                                 outputs = [x_theta_sample[p] for p in self.x_parameters])
-        
-        # self.f_recon = theano.function(inputs = [symbolic_x],
-        #                          outputs = [x_p_eval, x_log_r_eval])
-        
-        self.f_recon = theano.function(inputs = [symbolic_x],
-                                 outputs = [x_theta_eval[p] for p in self.x_parameters])
+        self.f_recon = theano.function(
+            inputs = [symbolic_x],
+            outputs = [x_theta_eval[p] for p in self.x_parameters])
     
     def lowerBound(self, x, x_theta, z_mu, z_log_var):
         #note that we sum the latent dimension and mean over the samples
@@ -224,10 +193,11 @@ class VariationalAutoEncoder(object):
         LL = - KL_qp + log_px_given_z
         return LL, log_px_given_z, KL_qp
     
-    def train(self, x_train, x_valid = None, N_epochs = 50, batch_size = 100, learning_rate = 1e-3):
+    def train(self, training_set, validation_set = None, N_epochs = 50, batch_size = 100,
+        learning_rate = 1e-3):
         
-        x_train = self.preprocess(x_train)
-        x_valid = self.preprocess(x_valid)
+        x_train = self.preprocess(training_set)
+        x_valid = self.preprocess(validation_set)
         
         training_string = "Training model for {}".format(N_epochs)
         if self.number_of_epochs_trained > 0:
@@ -240,9 +210,9 @@ class VariationalAutoEncoder(object):
         LL_train, logpx_train, KL_train = [], [], []
         LL_valid, logpx_valid, KL_valid = [], [], []
         
-        N = x_train.shape[0]
-        
         training_start = time()
+        
+        N = training_set.shape[0]
         
         for epoch in range(self.number_of_epochs_trained,
             self.number_of_epochs_trained + N_epochs):
@@ -290,6 +260,31 @@ class VariationalAutoEncoder(object):
         
         print("Training finished with a total of {} epoch{} after {}.".format(self.number_of_epochs_trained, "s" if N_epochs > 1 else "", convertTimeToString(training_duration)))
     
+    def evaluate(self, test_set):
+        
+        x_test = self.preprocess(test_set)
+        
+        lower_bound_test, _, _ = self.f_eval(x_test)
+        
+        print("Lower bound for test set: {:.4g}.".format(float(lower_bound_test)))
+        
+        z_eval = self.f_z(x_test)[0]
+        
+        x_theta_sample = self.f_sample(numpy.random.normal(size = (100,
+            self.latent_size)).astype('float32'))
+        x_theta_sample = {p: o for p, o in zip(self.x_parameters, x_theta_sample)}
+        x_sample = self.meanOfReconstructionDistribution(x_theta_sample)
+        
+        x_test_recon = self.f_recon(x_test)
+        x_test_recon = {p: o for p, o in zip(self.x_parameters, x_test_recon)}
+        x_test_recon["mean"] = self.meanOfReconstructionDistribution(x_test_recon)
+        
+        metrics = {
+            "LL_test": lower_bound_test
+        }
+        
+        return x_test, x_test_recon, z_eval, x_sample, metrics
+    
     def save(self, name, metadata = None):
         
         model = {
@@ -322,38 +317,6 @@ class VariationalAutoEncoder(object):
         
         self.number_of_epochs_trained = model["number of epochs trained"]
         self.learning_curves = model["learning curves"]
-    
-    def evaluate(self, x_test):
-        
-        x_test = self.preprocess(x_test)
-        
-        lower_bound_test, _, _ = self.f_eval(x_test)
-        
-        print("Lower bound for test set: {:.4g}.".format(float(lower_bound_test)))
-        
-        z_eval = self.f_z(x_test)[0]
-        
-        x_theta_sample = self.f_sample(numpy.random.normal(size = (100,
-            self.latent_size)).astype('float32'))
-        x_theta_sample = {p: o for p, o in zip(self.x_parameters, x_theta_sample)}
-        x_sample = self.meanOfReconstructionDistribution(x_theta_sample)
-        
-        x_test_recon = self.f_recon(x_test)
-        x_test_recon = {p: o for p, o in zip(self.x_parameters, x_test_recon)}
-        x_test_recon["mean"] = self.meanOfReconstructionDistribution(x_test_recon)
-        
-        metrics = {
-            "LL_test": lower_bound_test
-        }
-        
-        return x_test, x_test_recon, z_eval, x_sample, metrics
-    
-    # def logLikelihood(self, x_p, x_log_r, x, z_mu, z_log_var):
-    #     #note that we sum the latent dimension and mean over the samples
-    #     log_px_given_z = log_negative_binomial(x, x_p, x_log_r, eps = 1e-6).sum(axis = 1).mean()
-    #     KL_qp = kl_normal2_stdnormal(z_mu, z_log_var).sum(axis = 1).mean()
-    #     LL = - KL_qp + log_px_given_z
-    #     return LL, log_px_given_z, KL_qp
 
 def log_negative_binomial(x, p, log_r, eps = 0.0, approximation = "simple"):
     """
@@ -422,7 +385,7 @@ reconstruction_distributions = {
         "function": lambda x, x_theta, eps = 0.0: \
             log_bernoulli(x, x_theta["p"], eps),
         "mean": lambda x_theta: x_theta["p"],
-        # Bernouilli sample?
+        # TODO Consider switching to Bernouilli sampling
         "preprocess": lambda x: (x != 0).astype('float32')
     },
     

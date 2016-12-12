@@ -105,7 +105,7 @@ def loadSplitDataSets(name, filtering_method, feature_selection, feature_size,
         elif filtering_method:
             data_set, data_headers = loadFilteredDataSet(name, filtering_method)
         else:
-            data_set = loadDataSet(name)
+            data_set, data_headers = loadDataSet(name)
         (training_set, training_headers), (validation_set, validation_headers), \
             (test_set, test_headers) = splitDataSet(data_set, data_headers,
             splitting_method, splitting_fraction)
