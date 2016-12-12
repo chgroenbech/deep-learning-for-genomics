@@ -166,15 +166,27 @@ class VariationalAutoEncoder(object):
         # Set the update function for parameters. The Adam optimizer works really well with VAEs.
         update_expressions = updates.adam(all_gradients, all_parameters,
             learning_rate = symbolic_learning_rate)
-
+        
+        self.x_train = theano.shared(numpy.zeros([1, 1]),
+            theano.config.floatX, borrow = True)
+        self.x_eval = theano.shared(numpy.zeros([1, 1]),
+            theano.config.floatX, borrow = True)
+        
+        symbolic_batch_size = T.iscalar('batch_size')
+        symbolic_batch_index = T.iscalar('batch_index')
+        batch_slice = slice(symbolic_batch_index * symbolic_batch_size,
+            (symbolic_batch_index + 1) * symbolic_batch_size)
+        
         self.f_train = theano.function(
-            inputs = [symbolic_x, symbolic_learning_rate],
+            inputs = [symbolic_batch_index, symbolic_batch_size, symbolic_learning_rate],
             outputs = [lower_bound_train, log_p_x_train, KL__train],
+            givens = {symbolic_x: self.x_train[batch_slice]},
             updates = update_expressions)
         
         self.f_eval = theano.function(
-            inputs = [symbolic_x],
-            outputs = [lower_bound_eval, log_p_x_eval, KL__eval])
+            inputs = [],
+            outputs = [lower_bound_eval, log_p_x_eval, KL__eval],
+            givens = {symbolic_x: self.x_eval})
         
         self.f_z = theano.function(inputs = [symbolic_x], outputs = [z_eval])
         
@@ -196,8 +208,10 @@ class VariationalAutoEncoder(object):
     def train(self, training_set, validation_set = None, N_epochs = 50, batch_size = 100,
         learning_rate = 1e-3):
         
-        x_train = self.preprocess(training_set)
-        x_valid = self.preprocess(validation_set)
+        N = training_set.shape[0]
+        
+        x_train = self.preprocess(training_set).astype(theano.config.floatX)
+        x_valid = self.preprocess(validation_set).astype(theano.config.floatX)
         
         training_string = "Training model for {}".format(N_epochs)
         if self.number_of_epochs_trained > 0:
@@ -212,21 +226,19 @@ class VariationalAutoEncoder(object):
         
         training_start = time()
         
-        N = training_set.shape[0]
-        
         for epoch in range(self.number_of_epochs_trained,
             self.number_of_epochs_trained + N_epochs):
             
             epoch_start = time()
             
-            shuffled_indices = numpy.random.permutation(N)
+            numpy.random.shuffle(x_train)
+            self.x_train.set_value(x_train)
             
             for i in range(0, N, batch_size):
-                subset = shuffled_indices[i:(i + batch_size)]
-                x_batch = x_train[subset]
-                out = self.f_train(x_batch, learning_rate)
+                out = self.f_train(i, batch_size, learning_rate)
             
-            out = self.f_eval(x_train)
+            self.x_eval.set_value(x_train)
+            out = self.f_eval()
             LL_train += [out[0]] 
             logpx_train += [out[1]]
             KL_train += [out[2]]
@@ -234,7 +246,8 @@ class VariationalAutoEncoder(object):
             evaluation_string = "    Training set:   lower bound: {:.5g}, log p(x|z): {:.5g}, KL divergence: {:.5g}.".format(float(out[0]), float(out[1]), float(out[2]))
             
             if x_valid is not None:
-                out = self.f_eval(x_valid)
+                self.x_eval.set_value(x_valid)
+                out = self.f_eval()
                 LL_valid += [out[0]]
                 logpx_valid += [out[1]]
                 KL_valid += [out[2]]
@@ -262,7 +275,8 @@ class VariationalAutoEncoder(object):
     
     def evaluate(self, test_set):
         
-        x_test = self.preprocess(test_set)
+        x_test = theano.shared(self.preprocess(test_set),
+            theano.config.floatX, borrow = True)
         
         lower_bound_test, _, _ = self.f_eval(x_test)
         
