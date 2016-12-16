@@ -31,7 +31,7 @@ def loadCountData(name, filtering_method = None, clusters = None, feature_select
             filtering_method[1:] = [clusters[int(c)] for c in filtering_method[1:]]
     
     if name == "sample":
-        data_set = createSampleData()
+        data_set = createSampleData(m = 1000, n = 100, scale = 2, p = 0.8)
         if filtering_method:
             data_set = filterExamples(data_set, filtering_method = filtering_method)
         if feature_selection:
@@ -299,6 +299,7 @@ def splitDataSet(data, headers = None, splitting_method = "random",
         index_test = slice(V, N)
         
     # Combine training set of cells (rows, i) expressing more than 900 genes.
+    # TODO Splitting the Macosko way after selecting features only counts the selected features and not all features
     elif splitting_method == "Macosko":
         
         minimum_genes_expressed = 900
@@ -386,12 +387,12 @@ def saveSparseData(data, headers, file_path):
         pickle.dump(sparse_data, data_file)
         pickle.dump(headers, data_file)
 
-def modelName(filtering_method, feature_selection, feature_size,
-    splitting_method, splitting_fraction, reconstruction_distribution,
+def modelName(base_name, filtering_method, feature_selection, feature_size,
+    splitting_method, splitting_fraction, reconstruction_distribution, use_count_sum,
     reconstruction_classes, latent_size, hidden_structure, learning_rate,
     batch_size, number_of_epochs):
     
-    model_name = ""
+    model_name = base_name
     
     if filtering_method:
         model_name += "_f_" + filtering_method[0].replace(" ", "_")
@@ -405,7 +406,11 @@ def modelName(filtering_method, feature_selection, feature_size,
     
     model_name += "_r_" + reconstruction_distribution.replace(" ", "_")
     
-    model_name += "_c_" + str(reconstruction_classes)
+    if reconstruction_classes:
+        model_name += "_c_" + str(reconstruction_classes)
+    
+    if use_count_sum:
+        model_name += "_sum"
     
     model_name += "_l_" + str(latent_size) + "_h_" + "_".join(map(str,
         hidden_structure))
