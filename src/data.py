@@ -386,11 +386,12 @@ def saveSparseData(data, headers, file_path):
         pickle.dump(sparse_data, data_file)
         pickle.dump(headers, data_file)
 
-def modelName(base_name, filtering_method, feature_selection, feature_size,
-    splitting_method, splitting_fraction, reconstruction_distribution, latent_size,
-    hidden_structure, learning_rate, batch_size, number_of_epochs):
+def modelName(filtering_method, feature_selection, feature_size,
+    splitting_method, splitting_fraction, reconstruction_distribution,
+    reconstruction_classes, latent_size, hidden_structure, learning_rate,
+    batch_size, number_of_epochs):
     
-    model_name = base_name
+    model_name = ""
     
     if filtering_method:
         model_name += "_f_" + filtering_method[0].replace(" ", "_")
@@ -403,6 +404,8 @@ def modelName(base_name, filtering_method, feature_selection, feature_size,
         + str(splitting_fraction)
     
     model_name += "_r_" + reconstruction_distribution.replace(" ", "_")
+    
+    model_name += "_c_" + str(reconstruction_classes)
     
     model_name += "_l_" + str(latent_size) + "_h_" + "_".join(map(str,
         hidden_structure))

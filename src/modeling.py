@@ -8,7 +8,7 @@ import theano.tensor as T
 import numpy
 
 from lasagne.layers import (
-    InputLayer, DenseLayer,
+    InputLayer, DenseLayer, ReshapeLayer,
     get_output,
     get_all_params, get_all_param_values, set_all_param_values
 )
@@ -21,7 +21,7 @@ from parmesan.distributions import (
     kl_normal2_stdnormal
 )
 
-from lasagne import updates
+from lasagne import updates, objectives
 
 import data
 
@@ -29,11 +29,10 @@ from time import time
 from aux import convertTimeToString
 
 class VariationalAutoEncoder(object):
-    def __init__(self, feature_shape, latent_size, hidden_structure, reconstruction_distribution = None):
+    def __init__(self, feature_shape, latent_size, hidden_structure, reconstruction_distribution = None, reconstruction_classes = None):
         
-        # Setup
-        
-        super(VariationalAutoEncoder, self).__init__()
+        # TODO Remove
+        reconstruction_distribution = "poisson"
         
         print("Setting up model.")
         print("    feature size: {}".format(feature_shape))
@@ -43,7 +42,14 @@ class VariationalAutoEncoder(object):
             print("    reconstruction distribution: " + reconstruction_distribution)
         else:
             print("    reconstruction distribution: custom")
+        if reconstruction_classes is not None:
+            print("    reconstruction classes: {}".format(reconstruction_classes),
+                  " (including 0)")
         print("")
+        
+        # Setup
+        
+        super(VariationalAutoEncoder, self).__init__()
         
         self.feature_shape = feature_shape
         self.latent_size = latent_size
@@ -54,11 +60,12 @@ class VariationalAutoEncoder(object):
         symbolic_learning_rate = T.scalar("epsilon")
         
         self.number_of_epochs_trained = 0
+        # TODO Give shorter names to learning curves, and name them correctly in analysis module
         self.learning_curves = {
             "training": {
-                "lower bound": [],
-                "log p(x|z)": [],
-                "KL divergence": []
+                "lower bound": [], # "LB"
+                "log p(x|z)": [], # "ENRE"
+                "KL divergence": [] # "KL"
             },
             "validation": {
                 "lower bound": [],
@@ -76,20 +83,39 @@ class VariationalAutoEncoder(object):
             self.x_parameters = reconstruction_distribution["parameters"]
             self.reconstruction_activation_functions = \
                 reconstruction_distribution["activation functions"]
+            # self.special_number_of_units_for_parameters = \
+            #     reconstruction_distribution["number of units"]
             self.expectedNegativeReconstructionError = reconstruction_distribution["function"]
             self.meanOfReconstructionDistribution = reconstruction_distribution["mean"]
             self.preprocess = reconstruction_distribution["preprocess"]
         else:
+            reconstruction_distribution = "Gaussian (default)"
+            
             # Use a Gaussian distribution as standard
             self.x_parameters = ["mu", "sigma"]
             self.reconstruction_activation_functions = {
                 "mu": identity,
                 "sigma": identity
             }
+            # self.special_number_of_units_for_parameters = {}
             self.expectedNegativeReconstructionError = lambda x, x_theta, eps = 0.0: \
                 log_normal(x, x_theta["mu"], x_theta["sigma"], eps)
             self.meanOfReconstructionDistribution = lambda x_theta: x_theta["mu"]
             self.preprocess = lambda x: x
+        
+        if reconstruction_classes:
+            
+            self.x_parameters += ["p_k"]
+            self.reconstruction_activation_functions["p_k"] = softmax
+            log_distribution = self.expectedNegativeReconstructionError
+            self.expectedNegativeReconstructionError = lambda x, x_theta, eps = 0.0: \
+                log_cross_entropy_extended(x, x_theta,
+                    log_distribution, k_max = reconstruction_classes - 1, eps = 0.0)
+            mean_of_distribution = self.meanOfReconstructionDistribution
+            self.meanOfReconstructionDistribution = lambda x_theta: \
+                meanOfCrossEntropyExtendedDistibution(x_theta,
+                    mean_of_distribution, k_max = reconstruction_classes - 1)
+            self.k_max = reconstruction_classes - 1
         
         # Models
     
@@ -117,11 +143,23 @@ class VariationalAutoEncoder(object):
         for i, hidden_size in enumerate(reversed(hidden_structure)):
             l_dec = DenseLayer(l_dec, num_units = hidden_size, nonlinearity = rectify, name = 'DEC_DENSE{:d}'.format(len(hidden_structure) - i))
         
-        l_x_theta = {
-            p: DenseLayer(l_dec, num_units = feature_shape,
-                nonlinearity = self.reconstruction_activation_functions[p],
-                name = 'DEC_X_' + p.upper()) for p in self.x_parameters
-        }
+        l_x_theta = {}
+        
+        for p in self.x_parameters:
+            p_name = 'DEC_X_' + p.upper()
+            if self.reconstruction_activation_functions[p] == softmax:
+                l_dense = DenseLayer(l_dec,
+                    num_units = feature_shape * (self.k_max + 1),
+                    nonlinearity = identity, name = p_name + "_DENSE")
+                l_reshape = ReshapeLayer(l_dense, (-1, (self.k_max + 1)))
+                l_softmax = DenseLayer(l_reshape, num_units = (self.k_max + 1),
+                    nonlinearity = softmax, name = p_name + "_SOFTMAX")
+                l_x_theta[p] = ReshapeLayer(l_softmax,
+                    (-1, feature_shape, (self.k_max + 1)))
+            else:
+                l_x_theta[p] = DenseLayer(l_dec, num_units = feature_shape,
+                    nonlinearity = self.reconstruction_activation_functions[p],
+                    name = p_name)
         
         self.decoder = {p: l_x_theta[p] for p in self.x_parameters}
         
@@ -275,10 +313,10 @@ class VariationalAutoEncoder(object):
     
     def evaluate(self, test_set):
         
-        x_test = theano.shared(self.preprocess(test_set),
-            theano.config.floatX, borrow = True)
+        x_test = self.preprocess(test_set).astype(theano.config.floatX)
         
-        lower_bound_test, _, _ = self.f_eval(x_test)
+        self.x_eval.set_value(x_test)
+        lower_bound_test, _, _ = self.f_eval()
         
         print("Lower bound for test set: {:.4g}.".format(float(lower_bound_test)))
         
@@ -332,7 +370,18 @@ class VariationalAutoEncoder(object):
         self.number_of_epochs_trained = model["number of epochs trained"]
         self.learning_curves = model["learning curves"]
 
-def log_negative_binomial(x, p, log_r, eps = 0.0, approximation = "simple"):
+def log_poisson(x, log_lambda, eps = 0.0):
+    
+    x = T.clip(x, eps, x)
+    
+    lambda_ = T.exp(log_lambda)
+    lambda_ = T.clip(lambda_, eps, lambda_)
+    
+    y = x * log_lambda - lambda_ - T.gammaln(x + 1)
+    
+    return y
+
+def log_negative_binomial(x, p, log_r, eps = 0.0):
     """
     Compute log pdf of a negative binomial distribution with success probability p and number of failures, r, until the experiment is stopped, at values x.
     
@@ -354,14 +403,12 @@ def log_negative_binomial(x, p, log_r, eps = 0.0, approximation = "simple"):
 def meanOfNegativeBinomialDistribution(p, log_r):
     return p * numpy.exp(log_r) / (1 - p)
 
-def log_zero_inflated_poisson(x, pi, log_lambda, eps = 0.0, approximation = "simple"):
+def log_zero_inflated_poisson(x, pi, log_lambda, eps = 0.0):
     """
     Compute log pdf of a zero-inflated Poisson distribution with success probability pi and number of failures, r, until the experiment is stopped, at values x.
     
     A simple variation of Stirling's approximation is used: log x! = x log x - x.
     """
-    
-    x = T.clip(x, eps, x)
     
     pi = T.clip(pi, eps, 1.0 - eps)
     
@@ -369,21 +416,96 @@ def log_zero_inflated_poisson(x, pi, log_lambda, eps = 0.0, approximation = "sim
     lambda_ = T.clip(lambda_, eps, lambda_)
     
     y_0 = T.log(pi + (1 - pi) * T.exp(-lambda_))
-    y_1 = T.log(1 - pi) + x * log_lambda - lambda_ - T.gammaln(x + 1)
-    # y_1 = T.log(1 - pi) + x * T.log(lambda_) - lambda_ - T.gammaln(x + 1)
+    y_1 = T.log(1 - pi) + log_poisson(x, log_lambda, eps)
     
-    y = T.eq(x, eps) * y_0 + T.gt(x, eps) * y_1
+    y = T.eq(x, 0) * y_0 + T.gt(x, 0) * y_1
     
     return y
 
+def log_cross_entropy_extended(x, x_theta, log_distribution, k_max, eps = 0.0):
+    
+    p_k = x_theta["p_k"]
+    
+    F = x.shape[1]
+    
+    p_k = T.clip(p_k, eps, 1.0 - eps)
+    x_k = T.clip(x, 0, k_max)
+    
+    p_k = T.reshape(p_k, (-1, k_max + 1))
+    x_k = T.reshape(x_k, (-1, 1))
+    
+    y_cross_entropy = objectives.categorical_crossentropy(p_k, x_k)
+    y_cross_entropy = T.reshape(y_cross_entropy, (-1, F))
+    
+    y_log_distribution = log_distribution(x - k_max, x_theta, eps)
+
+    y = - y_cross_entropy + T.gt(x, k_max) * y_log_distribution
+    
+    return y
+
+def meanOfCrossEntropyExtendedDistibution(x_theta, mean_of_distribution, k_max):
+    
+    p_k = x_theta["p_k"]
+    
+    mean = numpy.argmax(p_k, axis = -1).astype("float64")
+    
+    k_max_indices = mean == k_max
+    
+    mean[k_max_indices] += numpy.exp(mean_of_distribution(x_theta)[k_max_indices])
+    
+    return mean
+
+def log_softmax_poisson(x, p_k, log_lambda, k_max = 10, eps = 0.0):
+    
+    F = x.shape[1]
+    
+    p_k = T.clip(p_k, eps, 1.0 - eps)
+    x_k = T.clip(x, 0, k_max)
+    
+    p_k = T.reshape(p_k, (-1, k_max + 1))
+    x_k = T.reshape(x_k, (-1, 1))
+    
+    y_cross_entropy = objectives.categorical_crossentropy(p_k, x_k)
+    y_cross_entropy = T.reshape(y_cross_entropy, (-1, F))
+    
+    y_log_poisson = log_poisson(x - k_max, log_lambda, eps)
+
+    y = - y_cross_entropy + T.gt(x, k_max) * y_log_poisson
+    
+    return y
+
+def meanOfSoftmaxPoissonDistribution(p_k, log_lambda, k_max):
+    
+    mean = numpy.argmax(p_k, axis = -1).astype("float64")
+    
+    k_max_indices = mean == k_max
+    
+    mean[k_max_indices] += numpy.exp(log_lambda[k_max_indices])
+    
+    return mean
+
 reconstruction_distributions = {
+    "bernoulli": {
+        "parameters": ["p"],
+        "activation functions": {
+            "p": sigmoid,
+        },
+        "number of units": {},
+        "function": lambda x, x_theta, eps = 0.0: \
+            log_bernoulli(x, x_theta["p"], eps),
+        "mean": lambda x_theta: x_theta["p"],
+        # TODO Consider switching to Bernouilli sampling
+        "preprocess": lambda x: (x != 0).astype('float32')
+    },
+    
     "negative_binomial": {
         "parameters": ["p", "log_r"],
         "activation functions": {
-            # "p": sigmoid,
-            "p": lambda x: T.clip(sigmoid(x), 0, 0.99),
+            "p": sigmoid,
+            # "p": lambda x: T.clip(sigmoid(x), 0, 0.99),
             "log_r": lambda x: T.clip(x, -10, 10)
         },
+        "number of units": {},
         "function": lambda x, x_theta, eps = 0.0: \
             log_negative_binomial(x, x_theta["p"], x_theta["log_r"], eps),
         "mean": lambda x_theta: \
@@ -391,16 +513,14 @@ reconstruction_distributions = {
         "preprocess": lambda x: x
     },
     
-    "bernoulli": {
-        "parameters": ["p"],
-        "activation functions": {
-            "p": sigmoid,
-        },
+    "poisson": {
+        "parameters": ["log_lambda"],
+        "activation functions": {"log_lambda": lambda x: T.clip(x, -10, 10)},
+        "number of units": {},
         "function": lambda x, x_theta, eps = 0.0: \
-            log_bernoulli(x, x_theta["p"], eps),
-        "mean": lambda x_theta: x_theta["p"],
-        # TODO Consider switching to Bernouilli sampling
-        "preprocess": lambda x: (x != 0).astype('float32')
+            log_poisson(x, x_theta["log_lambda"], eps),
+        "mean": lambda x_theta: numpy.exp(x_theta["log_lambda"]),
+        "preprocess": lambda x: x
     },
     
     "zero_inflated_poisson": {
@@ -409,12 +529,30 @@ reconstruction_distributions = {
             "pi": sigmoid,
             "log_lambda": lambda x: T.clip(x, -10, 10)
         },
+        "number of units": {},
         "function": lambda x, x_theta, eps = 0.0: \
             log_zero_inflated_poisson(x, x_theta["pi"], x_theta["log_lambda"], eps),
         "mean": lambda x_theta: (1 - x_theta["pi"]) * numpy.exp(x_theta["log_lambda"]),
         "preprocess": lambda x: x
+    },
+    
+    "softmax_poisson": {
+        "parameters": ["p_k", "log_lambda"],
+        "activation functions": {
+            "p_k": softmax,
+            "log_lambda": lambda x: T.clip(x, -10, 10)
+        },
+        "number of units": {"p_k": 10 + 1},
+        "function": lambda x, x_theta, eps = 0.0: \
+            log_softmax_poisson(x, x_theta["p_k"], x_theta["log_lambda"], k_max = 10,
+                eps = eps),
+        "mean": lambda x_theta: \
+            meanOfSoftmaxPoissonDistribution(x_theta["p_k"], x_theta["log_lambda"], k_max = 10),
+        "preprocess": lambda x: x
     }
 }
+
+
 
 if __name__ == '__main__':
     (training_set, training_headers), (validation_set, validation_headers), \
