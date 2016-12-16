@@ -81,11 +81,11 @@ def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
         
         difference_name = name + "/test_difference"
         plotHeatMap(x_test - x_test_recon["mean"], x_test_headers, clusters,
-            name = difference_name)
+            center = 0, name = difference_name)
         
         log_ratio_name = name + "/test_log_ratio"
         plotHeatMap(log(x_test / x_test_recon["mean"] + 1), x_test_headers, clusters,
-            name = log_ratio_name)
+            center = 0, name = log_ratio_name)
     
     print("Creating latent space scatter plot.")
     plotLatentSpace(latent_set, x_test_headers, clusters, name)
@@ -176,7 +176,8 @@ def plotProfile(cell, label, name = None):
     
     data.saveFigure(figure, figure_name)
 
-def plotHeatMap(data_set, data_set_headers = None, clusters = None, name = None):
+def plotHeatMap(data_set, data_set_headers = None, clusters = None, center = None,
+    name = None):
     
     figure_name = "heat_map"
     
@@ -217,7 +218,7 @@ def plotHeatMap(data_set, data_set_headers = None, clusters = None, name = None)
     axis = figure.add_subplot(1, 1, 1)
     
     seaborn.heatmap(data_set.T, xticklabels = False, yticklabels = False, cbar = True,
-        square = True, ax = axis)
+        square = True, center = center, ax = axis)
     
     axis.set_xlabel("Cell")
     axis.set_ylabel("Gene")
@@ -244,15 +245,17 @@ def plotLearningCurves(curves, name = None):
         colour = palette[i]
         
         for curve_name, curve in sorted(curve_set.items()):
-            if curve_name == "lower bound":
+            if curve_name == "LB":
+                curve_name = "$\\mathcal{L}$"
                 line_style = "solid"
-                curve_name = curve_name.capitalize()
                 axis = axis_1
-            elif curve_name == "log p(x|z)":
+            elif curve_name == "ENRE":
+                curve_name = "$\\log(p|z)$"
                 line_style = "dashed"
                 axis = axis_1
-            elif curve_name == "KL divergence":
+            elif curve_name == "KL":
                 line_style = "dashed"
+                curve_name = "$KL(p||q)$"
                 axis = axis_2
             epochs = arange(len(curve)) + 1
             label = curve_name + " ({} set)".format(curve_set_name)
@@ -283,6 +286,7 @@ def plotLatentSpace(latent_set, latent_set_headers = None, clusters = None, name
     axis = figure.add_subplot(1, 1, 1)
     
     if M > 2:
+        # TODO Try t-SNE.
         pca = PCA(n_components = 2)
         pca.fit(latent_set)
         latent_set = pca.transform(latent_set)
