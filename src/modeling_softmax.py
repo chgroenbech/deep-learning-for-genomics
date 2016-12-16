@@ -286,10 +286,10 @@ class VariationalAutoEncoder(object):
     
     def evaluate(self, test_set):
         
-        x_test = theano.shared(self.preprocess(test_set),
-            theano.config.floatX, borrow = True)
+        x_test = self.preprocess(test_set).astype(theano.config.floatX)
         
-        lower_bound_test, _, _ = self.f_eval(x_test)
+        self.x_eval.set_value(x_test)
+        lower_bound_test, _, _ = self.f_eval()
         
         print("Lower bound for test set: {:.4g}.".format(float(lower_bound_test)))
         
@@ -386,12 +386,10 @@ def log_zero_inflated_poisson(x, pi, log_lambda, eps = 0.0):
 
 def log_softmax_poisson(x, p_k, log_lambda, k_max = 10, eps = 0.0):
     
-    x_k = T.clip(x, 0, k_max)
-    k = T.argmax(p_k, axis = -1)
-    
     F = x.shape[1]
     
     p_k = T.clip(p_k, eps, 1.0 - eps)
+    x_k = T.clip(x, 0, k_max)
     
     p_k = T.reshape(p_k, (-1, k_max + 1))
     x_k = T.reshape(x_k, (-1, 1))
@@ -401,18 +399,17 @@ def log_softmax_poisson(x, p_k, log_lambda, k_max = 10, eps = 0.0):
     
     y_log_poisson = log_poisson(x - k_max, log_lambda, eps)
 
-    # TODO Multiply or add?
-    # y = - T.lt(k, k_max) * y_cross_entropy + T.eq(k, k_max) * y_cross_entropy * y_log_poisson
-    y = - y_cross_entropy + T.eq(k, k_max) * y_log_poisson
+    y = - y_cross_entropy + T.gt(x, k_max) * y_log_poisson
     
     return y
 
 def meanOfSoftmaxPoissonDistribution(p_k, log_lambda, k_max):
     
-    mean = numpy.argmax(p_k, axis = -1)
+    mean = numpy.argmax(p_k, axis = -1).astype("float64")
     
-    if k == k_max:
-        mean += numpy.exp(log_lambda)
+    k_max_indices = mean == k_max
+    
+    mean[k_max_indices] += numpy.exp(log_lambda[k_max_indices])
     
     return mean
 
@@ -480,10 +477,12 @@ reconstruction_distributions = {
             log_softmax_poisson(x, x_theta["p_k"], x_theta["log_lambda"], k_max = 10,
                 eps = eps),
         "mean": lambda x_theta: \
-            meanOfSoftmaxPoisson(x_theta["p_k"], x_theta["log_lambda"], k_max = 10),
+            meanOfSoftmaxPoissonDistribution(x_theta["p_k"], x_theta["log_lambda"], k_max = 10),
         "preprocess": lambda x: x
     }
 }
+
+
 
 if __name__ == '__main__':
     (training_set, training_headers), (validation_set, validation_headers), \
