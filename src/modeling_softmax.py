@@ -31,6 +31,9 @@ from aux import convertTimeToString
 class VariationalAutoEncoder(object):
     def __init__(self, feature_shape, latent_size, hidden_structure, reconstruction_distribution = None):
         
+        # TODO Remove
+        reconstruction_distribution = "poisson"
+        
         # Setup
         
         super(VariationalAutoEncoder, self).__init__()
@@ -76,8 +79,8 @@ class VariationalAutoEncoder(object):
             self.x_parameters = reconstruction_distribution["parameters"]
             self.reconstruction_activation_functions = \
                 reconstruction_distribution["activation functions"]
-            self.special_number_of_units_for_parameters = \
-                reconstruction_distribution["number of units"]
+            # self.special_number_of_units_for_parameters = \
+            #     reconstruction_distribution["number of units"]
             self.expectedNegativeReconstructionError = reconstruction_distribution["function"]
             self.meanOfReconstructionDistribution = reconstruction_distribution["mean"]
             self.preprocess = reconstruction_distribution["preprocess"]
@@ -88,11 +91,30 @@ class VariationalAutoEncoder(object):
                 "mu": identity,
                 "sigma": identity
             }
-            self.special_number_of_units_for_parameters = {}
+            # self.special_number_of_units_for_parameters = {}
             self.expectedNegativeReconstructionError = lambda x, x_theta, eps = 0.0: \
                 log_normal(x, x_theta["mu"], x_theta["sigma"], eps)
             self.meanOfReconstructionDistribution = lambda x_theta: x_theta["mu"]
             self.preprocess = lambda x: x
+        
+        classify = True
+        k_max = 10
+        
+        
+        
+        if classify:
+            
+            self.x_parameters += ["p_k"]
+            self.reconstruction_activation_functions["p_k"] = softmax
+            log_distribution = self.expectedNegativeReconstructionError
+            self.expectedNegativeReconstructionError = lambda x, x_theta, eps = 0.0: \
+                log_cross_entropy_extended(x, x_theta,
+                    log_distribution, k_max, eps = 0.0)
+            mean_of_distribution = self.meanOfReconstructionDistribution
+            self.meanOfReconstructionDistribution = lambda x_theta: \
+                meanOfCrossEntropyExtendedDistibution(x_theta,
+                    mean_of_distribution, k_max)
+            self.k_max = k_max
         
         # Models
     
@@ -125,10 +147,14 @@ class VariationalAutoEncoder(object):
         for p in self.x_parameters:
             p_name = 'DEC_X_' + p.upper()
             if self.reconstruction_activation_functions[p] == softmax:
-                l_dense = DenseLayer(l_dec, num_units = feature_shape * self.special_number_of_units_for_parameters[p], nonlinearity = identity, name = p_name + "_DENSE")
-                l_reshape = ReshapeLayer(l_dense, (-1, self.special_number_of_units_for_parameters[p]))
-                l_softmax = DenseLayer(l_reshape, num_units = self.special_number_of_units_for_parameters[p], nonlinearity = softmax, name = p_name + "_SOFTMAX")
-                l_x_theta[p] = ReshapeLayer(l_softmax, (-1, feature_shape, self.special_number_of_units_for_parameters[p]))
+                l_dense = DenseLayer(l_dec,
+                    num_units = feature_shape * (self.k_max + 1),
+                    nonlinearity = identity, name = p_name + "_DENSE")
+                l_reshape = ReshapeLayer(l_dense, (-1, (self.k_max + 1)))
+                l_softmax = DenseLayer(l_reshape, num_units = (self.k_max + 1),
+                    nonlinearity = softmax, name = p_name + "_SOFTMAX")
+                l_x_theta[p] = ReshapeLayer(l_softmax,
+                    (-1, feature_shape, (self.k_max + 1)))
             else:
                 l_x_theta[p] = DenseLayer(l_dec, num_units = feature_shape,
                     nonlinearity = self.reconstruction_activation_functions[p],
@@ -343,6 +369,17 @@ class VariationalAutoEncoder(object):
         self.number_of_epochs_trained = model["number of epochs trained"]
         self.learning_curves = model["learning curves"]
 
+def log_poisson(x, log_lambda, eps = 0.0):
+    
+    x = T.clip(x, eps, x)
+    
+    lambda_ = T.exp(log_lambda)
+    lambda_ = T.clip(lambda_, eps, lambda_)
+    
+    y = x * log_lambda - lambda_ - T.gammaln(x + 1)
+    
+    return y
+
 def log_negative_binomial(x, p, log_r, eps = 0.0):
     """
     Compute log pdf of a negative binomial distribution with success probability p and number of failures, r, until the experiment is stopped, at values x.
@@ -384,6 +421,39 @@ def log_zero_inflated_poisson(x, pi, log_lambda, eps = 0.0):
     
     return y
 
+def log_cross_entropy_extended(x, x_theta, log_distribution, k_max, eps = 0.0):
+    
+    p_k = x_theta["p_k"]
+    
+    F = x.shape[1]
+    
+    p_k = T.clip(p_k, eps, 1.0 - eps)
+    x_k = T.clip(x, 0, k_max)
+    
+    p_k = T.reshape(p_k, (-1, k_max + 1))
+    x_k = T.reshape(x_k, (-1, 1))
+    
+    y_cross_entropy = objectives.categorical_crossentropy(p_k, x_k)
+    y_cross_entropy = T.reshape(y_cross_entropy, (-1, F))
+    
+    y_log_distribution = log_distribution(x - k_max, x_theta, eps)
+
+    y = - y_cross_entropy + T.gt(x, k_max) * y_log_distribution
+    
+    return y
+
+def meanOfCrossEntropyExtendedDistibution(x_theta, mean_of_distribution, k_max):
+    
+    p_k = x_theta["p_k"]
+    
+    mean = numpy.argmax(p_k, axis = -1).astype("float64")
+    
+    k_max_indices = mean == k_max
+    
+    mean[k_max_indices] += numpy.exp(mean_of_distribution(x_theta)[k_max_indices])
+    
+    return mean
+
 def log_softmax_poisson(x, p_k, log_lambda, k_max = 10, eps = 0.0):
     
     F = x.shape[1]
@@ -413,17 +483,6 @@ def meanOfSoftmaxPoissonDistribution(p_k, log_lambda, k_max):
     
     return mean
 
-def log_poisson(x, log_lambda, eps = 0.0):
-    
-    x = T.clip(x, eps, x)
-    
-    lambda_ = T.exp(log_lambda)
-    lambda_ = T.clip(lambda_, eps, lambda_)
-    
-    y = x * log_lambda - lambda_ - T.gammaln(x + 1)
-    
-    return y
-
 reconstruction_distributions = {
     "bernoulli": {
         "parameters": ["p"],
@@ -450,6 +509,16 @@ reconstruction_distributions = {
             log_negative_binomial(x, x_theta["p"], x_theta["log_r"], eps),
         "mean": lambda x_theta: \
             meanOfNegativeBinomialDistribution(x_theta["p"], x_theta["log_r"]),
+        "preprocess": lambda x: x
+    },
+    
+    "poisson": {
+        "parameters": ["log_lambda"],
+        "activation functions": {"log_lambda": lambda x: T.clip(x, -10, 10)},
+        "number of units": {},
+        "function": lambda x, x_theta, eps = 0.0: \
+            log_poisson(x, x_theta["log_lambda"], eps),
+        "mean": lambda x_theta: numpy.exp(x_theta["log_lambda"]),
         "preprocess": lambda x: x
     },
     
