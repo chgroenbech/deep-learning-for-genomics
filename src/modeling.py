@@ -474,6 +474,23 @@ def log_zero_inflated_poisson(x, pi, log_lambda, eps = 0.0):
     
     return y
 
+# TODO Gives NaNs?
+def log_zero_inflated_negative_binomial(x, pi, p, log_r, eps = 0.0):
+    
+    pi = T.clip(pi, eps, 1.0 - eps)
+    
+    p = T.clip(p, eps, 1.0 - eps)
+    
+    r = T.exp(log_r)
+    r = T.clip(r, eps, r)
+    
+    y_0 = T.log(pi + (1 - pi) * r * T.log(1 - p))
+    y_1 = T.log(1 - pi) + log_negative_binomial(x, p, log_r, eps)
+    
+    y = T.eq(x, 0) * y_0 + T.gt(x, 0) * y_1
+    
+    return y
+
 def log_cross_entropy_extended(x, x_theta, log_distribution, k_max, eps = 0.0):
     
     p_k = x_theta["p_k"]
@@ -544,7 +561,6 @@ reconstruction_distributions = {
         "activation functions": {
             "p": sigmoid,
         },
-        "number of units": {},
         "function": lambda x, x_theta, eps = 0.0: \
             log_bernoulli(x, x_theta["p"], eps),
         "mean": lambda x_theta: x_theta["p"],
@@ -556,10 +572,8 @@ reconstruction_distributions = {
         "parameters": ["p", "log_r"],
         "activation functions": {
             "p": sigmoid,
-            # "p": lambda x: T.clip(sigmoid(x), 0, 0.99),
             "log_r": lambda x: T.clip(x, -10, 10)
         },
-        "number of units": {},
         "function": lambda x, x_theta, eps = 0.0: \
             log_negative_binomial(x, x_theta["p"], x_theta["log_r"], eps),
         "mean": lambda x_theta: \
@@ -570,7 +584,6 @@ reconstruction_distributions = {
     "poisson": {
         "parameters": ["log_lambda"],
         "activation functions": {"log_lambda": lambda x: T.clip(x, -10, 10)},
-        "number of units": {},
         "function": lambda x, x_theta, eps = 0.0: \
             log_poisson(x, x_theta["log_lambda"], eps),
         "mean": lambda x_theta: numpy.exp(x_theta["log_lambda"]),
@@ -583,10 +596,24 @@ reconstruction_distributions = {
             "pi": sigmoid,
             "log_lambda": lambda x: T.clip(x, -10, 10)
         },
-        "number of units": {},
         "function": lambda x, x_theta, eps = 0.0: \
             log_zero_inflated_poisson(x, x_theta["pi"], x_theta["log_lambda"], eps),
         "mean": lambda x_theta: (1 - x_theta["pi"]) * numpy.exp(x_theta["log_lambda"]),
+        "preprocess": lambda x: x
+    },
+    
+    "zero_inflated_negative_binomial": {
+        "parameters": ["pi", "p", "log_r"],
+        "activation functions": {
+            "pi": sigmoid,
+            "p": sigmoid,
+            "log_r": lambda x: T.clip(x, -10, 10)
+        },
+        "function": lambda x, x_theta, eps = 0.0: \
+            log_zero_inflated_negative_binomial(x, x_theta["pi"], x_theta["p"],
+                x_theta["log_r"], eps),
+        "mean": lambda x_theta: (1 - x_theta["pi"]) \
+            * meanOfNegativeBinomialDistribution(x_theta["p"], x_theta["log_r"]),
         "preprocess": lambda x: x
     },
     
@@ -596,7 +623,6 @@ reconstruction_distributions = {
             "p_k": softmax,
             "log_lambda": lambda x: T.clip(x, -10, 10)
         },
-        "number of units": {"p_k": 10 + 1},
         "function": lambda x, x_theta, eps = 0.0: \
             log_softmax_poisson(x, x_theta["p_k"], x_theta["log_lambda"], k_max = 10,
                 eps = eps),
