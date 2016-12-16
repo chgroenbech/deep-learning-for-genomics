@@ -8,7 +8,7 @@ import theano.tensor as T
 import numpy
 
 from lasagne.layers import (
-    InputLayer, DenseLayer, ReshapeLayer,
+    InputLayer, DenseLayer, ReshapeLayer, ConcatLayer,
     get_output,
     get_all_params, get_all_param_values, set_all_param_values
 )
@@ -28,11 +28,13 @@ import data
 from time import time
 from aux import convertTimeToString
 
-class VariationalAutoEncoder(object):
-    def __init__(self, feature_shape, latent_size, hidden_structure, reconstruction_distribution = None, reconstruction_classes = None):
+class VariationalAutoEncoderForCounts(object):
+    def __init__(self, feature_shape, latent_size, hidden_structure,
+        reconstruction_distribution = None, reconstruction_classes = None,
+        use_count_sum = False):
         
-        # TODO Remove
-        reconstruction_distribution = "poisson"
+        self.use_count_sum = use_count_sum and \
+            (reconstruction_distribution != "bernoulli")
         
         print("Setting up model.")
         print("    feature size: {}".format(feature_shape))
@@ -42,35 +44,36 @@ class VariationalAutoEncoder(object):
             print("    reconstruction distribution: " + reconstruction_distribution)
         else:
             print("    reconstruction distribution: custom")
-        if reconstruction_classes is not None:
+        if reconstruction_classes:
             print("    reconstruction classes: {}".format(reconstruction_classes),
-                  " (including 0)")
+                  " (including 0s)")
+        if self.use_count_sum:
+            print("    using count sums")
         print("")
         
         # Setup
         
-        super(VariationalAutoEncoder, self).__init__()
+        super(VariationalAutoEncoderForCounts, self).__init__()
         
         self.feature_shape = feature_shape
         self.latent_size = latent_size
         self.hidden_structure = hidden_structure
         
-        symbolic_x = T.matrix('x')
-        symbolic_z = T.matrix('z')
-        symbolic_learning_rate = T.scalar("epsilon")
+        symbolic_x = T.matrix('x') # counts
+        symbolic_z = T.matrix('z') # latent variable
         
         self.number_of_epochs_trained = 0
-        # TODO Give shorter names to learning curves, and name them correctly in analysis module
+        symbolic_learning_rate = T.scalar("epsilon")
         self.learning_curves = {
             "training": {
-                "lower bound": [], # "LB"
-                "log p(x|z)": [], # "ENRE"
-                "KL divergence": [] # "KL"
+                "LB": [],
+                "ENRE": [],
+                "KL": []
             },
             "validation": {
-                "lower bound": [],
-                "log p(x|z)": [],
-                "KL divergence": []
+                "LB": [],
+                "ENRE": [],
+                "KL": []
             }
         }
         
@@ -83,8 +86,6 @@ class VariationalAutoEncoder(object):
             self.x_parameters = reconstruction_distribution["parameters"]
             self.reconstruction_activation_functions = \
                 reconstruction_distribution["activation functions"]
-            # self.special_number_of_units_for_parameters = \
-            #     reconstruction_distribution["number of units"]
             self.expectedNegativeReconstructionError = reconstruction_distribution["function"]
             self.meanOfReconstructionDistribution = reconstruction_distribution["mean"]
             self.preprocess = reconstruction_distribution["preprocess"]
@@ -97,7 +98,6 @@ class VariationalAutoEncoder(object):
                 "mu": identity,
                 "sigma": identity
             }
-            # self.special_number_of_units_for_parameters = {}
             self.expectedNegativeReconstructionError = lambda x, x_theta, eps = 0.0: \
                 log_normal(x, x_theta["mu"], x_theta["sigma"], eps)
             self.meanOfReconstructionDistribution = lambda x_theta: x_theta["mu"]
@@ -116,6 +116,9 @@ class VariationalAutoEncoder(object):
                 meanOfCrossEntropyExtendedDistibution(x_theta,
                     mean_of_distribution, k_max = reconstruction_classes - 1)
             self.k_max = reconstruction_classes - 1
+        
+        if self.use_count_sum:
+            symbolic_n = T.matrix('n') # sum of counts
         
         # Models
     
@@ -137,8 +140,14 @@ class VariationalAutoEncoder(object):
         
         ## Generative model p(x|z)
         
-        l_dec_in = InputLayer(shape = (None, latent_size), name = "DEC_INPUT")
-        l_dec = l_dec_in
+        l_dec_z_in = InputLayer(shape = (None, latent_size), name = "DEC_INPUT")
+        
+        if self.use_count_sum:
+            l_dec_n_in = InputLayer(shape = (None, 1), name = "DEC_N_INPUT")
+            l_dec = ConcatLayer([l_dec_z_in, l_dec_n_in], axis = 1,
+                name = "DEC_MERGE_INPUT")
+        else:
+            l_dec = l_dec_z_in
         
         for i, hidden_size in enumerate(reversed(hidden_structure)):
             l_dec = DenseLayer(l_dec, num_units = hidden_size, nonlinearity = rectify, name = 'DEC_DENSE{:d}'.format(len(hidden_structure) - i))
@@ -168,20 +177,29 @@ class VariationalAutoEncoder(object):
         ## Training outputs
         z_train, z_mu_train, z_log_var_train = get_output(
             [l_z, l_z_mu, l_z_log_var], {l_enc_in: symbolic_x}, deterministic = False)
-        x_theta_train = get_output([l_x_theta[p] for p in self.x_parameters], {l_dec_in: z_train},
+        inputs = {l_dec_z_in: z_train}
+        if self.use_count_sum:
+            inputs[l_dec_n_in] = symbolic_n
+        x_theta_train = get_output([l_x_theta[p] for p in self.x_parameters], inputs,
             deterministic = False)
         x_theta_train = {p: o for p, o in zip(self.x_parameters, x_theta_train)}
         
         ## Evaluation outputs
         z_eval, z_mu_eval, z_log_var_eval = get_output(
             [l_z, l_z_mu, l_z_log_var], {l_enc_in: symbolic_x}, deterministic = True)
-        x_theta_eval = get_output([l_x_theta[p] for p in self.x_parameters], {l_dec_in: z_eval},
+        inputs = {l_dec_z_in: z_eval}
+        if self.use_count_sum:
+            inputs[l_dec_n_in] = symbolic_n
+        x_theta_eval = get_output([l_x_theta[p] for p in self.x_parameters], inputs,
             deterministic = True)
         x_theta_eval = {p: o for p, o in zip(self.x_parameters, x_theta_eval)}
         
         ## Sample outputs
         
-        x_theta_sample = get_output([l_x_theta[p] for p in self.x_parameters], {l_dec_in: symbolic_z},
+        inputs = {l_dec_z_in: symbolic_z}
+        if self.use_count_sum:
+            inputs[l_dec_n_in] = symbolic_n
+        x_theta_sample = get_output([l_x_theta[p] for p in self.x_parameters], inputs,
             deterministic = True)
         x_theta_sample = {p: o for p, o in zip(self.x_parameters, x_theta_sample)}
         
@@ -205,35 +223,40 @@ class VariationalAutoEncoder(object):
         update_expressions = updates.adam(all_gradients, all_parameters,
             learning_rate = symbolic_learning_rate)
         
-        self.x_train = theano.shared(numpy.zeros([1, 1]),
-            theano.config.floatX, borrow = True)
-        self.x_eval = theano.shared(numpy.zeros([1, 1]),
-            theano.config.floatX, borrow = True)
-        
-        symbolic_batch_size = T.iscalar('batch_size')
-        symbolic_batch_index = T.iscalar('batch_index')
-        batch_slice = slice(symbolic_batch_index * symbolic_batch_size,
-            (symbolic_batch_index + 1) * symbolic_batch_size)
+        inputs = [symbolic_x]
+        if self.use_count_sum:
+            inputs.append(symbolic_n)
+        inputs.append(symbolic_learning_rate)
         
         self.f_train = theano.function(
-            inputs = [symbolic_batch_index, symbolic_batch_size, symbolic_learning_rate],
+            inputs = inputs,
             outputs = [lower_bound_train, log_p_x_train, KL__train],
-            givens = {symbolic_x: self.x_train[batch_slice]},
             updates = update_expressions)
         
-        self.f_eval = theano.function(
-            inputs = [],
-            outputs = [lower_bound_eval, log_p_x_eval, KL__eval],
-            givens = {symbolic_x: self.x_eval})
+        inputs = [symbolic_x]
+        if self.use_count_sum:
+            inputs.append(symbolic_n)
         
+        self.f_eval = theano.function(
+            inputs = inputs,
+            outputs = [lower_bound_eval, log_p_x_eval, KL__eval])
+       
         self.f_z = theano.function(inputs = [symbolic_x], outputs = [z_eval])
         
+        inputs = [symbolic_z]
+        if self.use_count_sum:
+            inputs.append(symbolic_n)
+        
         self.f_sample = theano.function(
-            inputs = [symbolic_z],
+            inputs = inputs,
             outputs = [x_theta_sample[p] for p in self.x_parameters])
         
+        inputs = [symbolic_x]
+        if self.use_count_sum:
+            inputs.append(symbolic_n)
+        
         self.f_recon = theano.function(
-            inputs = [symbolic_x],
+            inputs = inputs,
             outputs = [x_theta_eval[p] for p in self.x_parameters])
     
     def lowerBound(self, x, x_theta, z_mu, z_log_var):
@@ -246,10 +269,17 @@ class VariationalAutoEncoder(object):
     def train(self, training_set, validation_set = None, N_epochs = 50, batch_size = 100,
         learning_rate = 1e-3):
         
-        N = training_set.shape[0]
+        M = training_set.shape[0]
         
-        x_train = self.preprocess(training_set).astype(theano.config.floatX)
-        x_valid = self.preprocess(validation_set).astype(theano.config.floatX)
+        x_train = training_set
+        x_valid = validation_set
+        
+        if self.use_count_sum:
+            n_train = x_train.sum(axis = 1).reshape(-1, 1)
+            n_valid = x_valid.sum(axis = 1).reshape(-1, 1)
+        
+        x_train = self.preprocess(x_train)
+        x_valid = self.preprocess(x_valid)
         
         training_string = "Training model for {}".format(N_epochs)
         if self.number_of_epochs_trained > 0:
@@ -269,28 +299,38 @@ class VariationalAutoEncoder(object):
             
             epoch_start = time()
             
-            numpy.random.shuffle(x_train)
-            self.x_train.set_value(x_train)
+            shuffled_indices = numpy.random.permutation(M)
             
-            for i in range(0, N, batch_size):
-                out = self.f_train(i, batch_size, learning_rate)
+            for i in range(0, M, batch_size):
+                subset = shuffled_indices[i:(i + batch_size)]
+                inputs = [x_train[subset]]
+                if self.use_count_sum:
+                    inputs.append(n_train[subset])
+                inputs.append(learning_rate)
+                out = self.f_train(*inputs)
             
-            self.x_eval.set_value(x_train)
-            out = self.f_eval()
+            inputs = [x_train]
+            if self.use_count_sum:
+                inputs.append(n_train)
+            out = self.f_eval(*inputs)
+            
             LL_train += [out[0]] 
             logpx_train += [out[1]]
             KL_train += [out[2]]
             
-            evaluation_string = "    Training set:   lower bound: {:.5g}, log p(x|z): {:.5g}, KL divergence: {:.5g}.".format(float(out[0]), float(out[1]), float(out[2]))
+            evaluation_string = "    Training set:   LB: {:.5g}, ENRE: {:.5g}, KL: {:.5g}.".format(float(out[0]), float(out[1]), float(out[2]))
             
             if x_valid is not None:
-                self.x_eval.set_value(x_valid)
-                out = self.f_eval()
+                inputs = [x_valid]
+                if self.use_count_sum:
+                    inputs.append(n_valid)
+                out = self.f_eval(*inputs)
+                
                 LL_valid += [out[0]]
                 logpx_valid += [out[1]]
                 KL_valid += [out[2]]
                 
-                evaluation_string += "\n    Validation set: lower bound: {:.5g}, log p(x|z): {:.5g}, KL divergence: {:.5g}.".format(float(out[0]), float(out[1]), float(out[2]))
+                evaluation_string += "\n    Validation set: LB: {:.5g}, ENRE: {:.5g}, KL: {:.5g}.".format(float(out[0]), float(out[1]), float(out[2]))
             
             epoch_duration = time() - epoch_start
                 
@@ -301,33 +341,45 @@ class VariationalAutoEncoder(object):
         
         self.number_of_epochs_trained += N_epochs
         
-        self.learning_curves["training"]["lower bound"] += LL_train
-        self.learning_curves["training"]["log p(x|z)"] += logpx_train
-        self.learning_curves["training"]["KL divergence"] += KL_train
+        self.learning_curves["training"]["LB"] += LL_train
+        self.learning_curves["training"]["ENRE"] += logpx_train
+        self.learning_curves["training"]["KL"] += KL_train
         
-        self.learning_curves["validation"]["lower bound"] += LL_valid
-        self.learning_curves["validation"]["log p(x|z)"] += logpx_valid
-        self.learning_curves["validation"]["KL divergence"] += KL_valid
+        self.learning_curves["validation"]["LB"] += LL_valid
+        self.learning_curves["validation"]["ENRE"] += logpx_valid
+        self.learning_curves["validation"]["KL"] += KL_valid
         
         print("Training finished with a total of {} epoch{} after {}.".format(self.number_of_epochs_trained, "s" if N_epochs > 1 else "", convertTimeToString(training_duration)))
     
     def evaluate(self, test_set):
         
-        x_test = self.preprocess(test_set).astype(theano.config.floatX)
+        x_test = test_set
         
-        self.x_eval.set_value(x_test)
-        lower_bound_test, _, _ = self.f_eval()
+        if self.use_count_sum:
+            n_test = x_test.sum(axis = 1).reshape(-1, 1)
+        
+        x_test = self.preprocess(x_test)
+        
+        inputs = [x_test]
+        if self.use_count_sum:
+            inputs.append(n_test)
+        lower_bound_test, _, _ = self.f_eval(*inputs)
         
         print("Lower bound for test set: {:.4g}.".format(float(lower_bound_test)))
         
         z_eval = self.f_z(x_test)[0]
         
-        x_theta_sample = self.f_sample(numpy.random.normal(size = (100,
-            self.latent_size)).astype('float32'))
+        inputs = [numpy.random.normal(size = (100, self.latent_size)).astype('float32')]
+        if self.use_count_sum:
+            inputs.append(numpy.random.poisson(0.5, size = (100, 1)).astype('float32'))
+        x_theta_sample = self.f_sample(*inputs)
         x_theta_sample = {p: o for p, o in zip(self.x_parameters, x_theta_sample)}
         x_sample = self.meanOfReconstructionDistribution(x_theta_sample)
         
-        x_test_recon = self.f_recon(x_test)
+        inputs = [x_test]
+        if self.use_count_sum:
+            inputs.append(n_test)
+        x_test_recon = self.f_recon(*inputs)
         x_test_recon = {p: o for p, o in zip(self.x_parameters, x_test_recon)}
         x_test_recon["mean"] = self.meanOfReconstructionDistribution(x_test_recon)
         
@@ -428,7 +480,7 @@ def log_cross_entropy_extended(x, x_theta, log_distribution, k_max, eps = 0.0):
     
     F = x.shape[1]
     
-    p_k = T.clip(p_k, eps, 1.0 - eps)
+    p_k = T.clip(p_k, eps, 1.0)
     x_k = T.clip(x, 0, k_max)
     
     p_k = T.reshape(p_k, (-1, k_max + 1))
@@ -437,9 +489,11 @@ def log_cross_entropy_extended(x, x_theta, log_distribution, k_max, eps = 0.0):
     y_cross_entropy = objectives.categorical_crossentropy(p_k, x_k)
     y_cross_entropy = T.reshape(y_cross_entropy, (-1, F))
     
-    y_log_distribution = log_distribution(x - k_max, x_theta, eps)
+    y_log_distribution = T.ge(x, k_max) * log_distribution(x - k_max, x_theta, eps)
 
-    y = - y_cross_entropy + T.gt(x, k_max) * y_log_distribution
+    # y = - T.lt(x, 0) * y_cross_entropy + y_log_distribution
+    y = - y_cross_entropy + T.lt(x, 0) * y_log_distribution
+    # y = - y_cross_entropy + y_log_distribution
     
     return y
 
@@ -468,9 +522,9 @@ def log_softmax_poisson(x, p_k, log_lambda, k_max = 10, eps = 0.0):
     y_cross_entropy = objectives.categorical_crossentropy(p_k, x_k)
     y_cross_entropy = T.reshape(y_cross_entropy, (-1, F))
     
-    y_log_poisson = log_poisson(x - k_max, log_lambda, eps)
+    y_log_poisson = T.ge(x, k_max) * log_poisson(x - k_max, log_lambda, eps)
 
-    y = - y_cross_entropy + T.gt(x, k_max) * y_log_poisson
+    y = - y_cross_entropy + y_log_poisson
     
     return y
 

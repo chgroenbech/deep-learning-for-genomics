@@ -12,7 +12,7 @@ from itertools import product
 def main(data_name, cluster_name, splitting_method = "random", splitting_fraction = 0.8,
     filtering_method = None, feature_selection = None, feature_size = None,
     latent_sizes = None, hidden_structure = None, reconstruction_distributions = None, 
-    reconstruction_classes = None, numbers_of_epochs = 10, batch_size = 100,
+    reconstruction_classes = None, use_count_sum = False, numbers_of_epochs = 10, batch_size = 100,
     learning_rate = 1e-3, force_training = False):
     
     random.seed(42)
@@ -54,13 +54,13 @@ def main(data_name, cluster_name, splitting_method = "random", splitting_fractio
         
         # Model
         
-        model_name = data.modelName(filtering_method, feature_selection,
+        model_name = data.modelName("VAE", filtering_method, feature_selection,
             feature_size, splitting_method, splitting_fraction,
-            reconstruction_distribution, reconstruction_classes,
+            reconstruction_distribution, reconstruction_classes, use_count_sum,
             latent_size, hidden_structure, learning_rate, batch_size, number_of_epochs)
         
-        model = modeling.VariationalAutoEncoder(feature_size, latent_size,
-            hidden_structure, reconstruction_distribution, reconstruction_classes)
+        model = modeling.VariationalAutoEncoderForCounts(feature_size, latent_size,
+            hidden_structure, reconstruction_distribution, reconstruction_classes, use_count_sum)
         
         previous_model_name, epochs_still_to_train = \
             data.findPreviouslyTrainedModel(model_name)
@@ -126,6 +126,8 @@ parser.add_argument("--reconstruction-distributions", metavar = "distribution", 
     nargs = '+', help = "distributions for the reconstructions for different models")
 parser.add_argument("--reconstruction-classes", metavar = "k", type = int,
     help = "the maximum count for which to use classification")
+parser.add_argument("--use-count-sum", action = "store_true",
+    help = "use the count sum of each example for the reconstructions")
 parser.add_argument("--numbers-of-epochs", metavar = "N", type = int, default = 10,
     nargs = '+', help = "numbers of epochs for which to train and to save model parameters for")
 parser.add_argument("--batch-size", metavar = "B", type = int, default = 100,
