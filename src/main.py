@@ -12,7 +12,7 @@ from itertools import product
 def main(data_name, cluster_name, splitting_method = "random", splitting_fraction = 0.8,
     filtering_method = None, feature_selection = None, feature_size = None,
     latent_sizes = None, hidden_structure = None, reconstruction_distributions = None, 
-    reconstruction_classes = None, use_count_sum = False, numbers_of_epochs = 10, batch_size = 100,
+    numbers_of_reconstruction_classes = [0], use_count_sum = False, numbers_of_epochs = 10, batch_size = 100,
     learning_rate = 1e-3, force_training = False):
     
     random.seed(42)
@@ -49,18 +49,32 @@ def main(data_name, cluster_name, splitting_method = "random", splitting_fractio
     if not latent_sizes:
         latent_sizes = [feature_size / 100]
     
-    for latent_size, reconstruction_distribution, number_of_epochs in \
-        product(latent_sizes, reconstruction_distributions, numbers_of_epochs):
+    for latent_size, reconstruction_distribution, number_of_reconstruction_classes, \
+        number_of_epochs in product(latent_sizes, reconstruction_distributions, \
+        numbers_of_reconstruction_classes, numbers_of_epochs):
+        
+        if reconstruction_distribution == "bernoulli":
+            if use_count_sum:
+                print("Can't use count sum with Bernoulli distribution.\n")
+                continue
+            if number_of_reconstruction_classes > 0:
+                print("Can't use reconstruction classification with Bernoulli distribution.\n")
+                continue
+        
+        if "zero_inflated" in reconstruction_distribution:
+            if number_of_reconstruction_classes > 0:
+                print("Can't use reconstruction classification with zero-inflated distributions.\n")
+                continue
         
         # Model
         
         model_name = data.modelName("VAE", filtering_method, feature_selection,
             feature_size, splitting_method, splitting_fraction,
-            reconstruction_distribution, reconstruction_classes, use_count_sum,
+            reconstruction_distribution, number_of_reconstruction_classes, use_count_sum,
             latent_size, hidden_structure, learning_rate, batch_size, number_of_epochs)
         
         model = modeling.VariationalAutoEncoderForCounts(feature_size, latent_size,
-            hidden_structure, reconstruction_distribution, reconstruction_classes, use_count_sum)
+            hidden_structure, reconstruction_distribution, number_of_reconstruction_classes, use_count_sum)
         
         previous_model_name, epochs_still_to_train = \
             data.findPreviouslyTrainedModel(model_name)
@@ -124,8 +138,9 @@ parser.add_argument("--feature-size", metavar = "size", type = int,
     help = "size of feature space")
 parser.add_argument("--reconstruction-distributions", metavar = "distribution", type = str,
     nargs = '+', help = "distributions for the reconstructions for different models")
-parser.add_argument("--reconstruction-classes", metavar = "k", type = int,
-    help = "the maximum count for which to use classification")
+parser.add_argument("--numbers-of-reconstruction-classes", metavar = "k", type = int,
+    nargs = '+', default = [0],
+    help = "the maximum counts for which to use classification for different models")
 parser.add_argument("--use-count-sum", action = "store_true",
     help = "use the count sum of each example for the reconstructions")
 parser.add_argument("--numbers-of-epochs", metavar = "N", type = int, default = 10,

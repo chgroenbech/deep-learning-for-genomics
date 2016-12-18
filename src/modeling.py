@@ -30,7 +30,7 @@ from aux import convertTimeToString
 
 class VariationalAutoEncoderForCounts(object):
     def __init__(self, feature_shape, latent_size, hidden_structure,
-        reconstruction_distribution = None, reconstruction_classes = None,
+        reconstruction_distribution = None, number_of_reconstruction_classes = None,
         use_count_sum = False):
         
         self.use_count_sum = use_count_sum and \
@@ -44,8 +44,8 @@ class VariationalAutoEncoderForCounts(object):
             print("    reconstruction distribution: " + reconstruction_distribution)
         else:
             print("    reconstruction distribution: custom")
-        if reconstruction_classes:
-            print("    reconstruction classes: {}".format(reconstruction_classes),
+        if number_of_reconstruction_classes > 0:
+            print("    reconstruction classes: {}".format(number_of_reconstruction_classes),
                   " (including 0s)")
         if self.use_count_sum:
             print("    using count sums")
@@ -103,19 +103,20 @@ class VariationalAutoEncoderForCounts(object):
             self.meanOfReconstructionDistribution = lambda x_theta: x_theta["mu"]
             self.preprocess = lambda x: x
         
-        if reconstruction_classes:
+        if number_of_reconstruction_classes > 0:
             
             self.x_parameters += ["p_k"]
             self.reconstruction_activation_functions["p_k"] = softmax
             log_distribution = self.expectedNegativeReconstructionError
             self.expectedNegativeReconstructionError = lambda x, x_theta, eps = 0.0: \
                 log_cross_entropy_extended(x, x_theta,
-                    log_distribution, k_max = reconstruction_classes - 1, eps = 0.0)
+                    log_distribution, k_max = number_of_reconstruction_classes - 1,
+                    eps = 0.0)
             mean_of_distribution = self.meanOfReconstructionDistribution
             self.meanOfReconstructionDistribution = lambda x_theta: \
                 meanOfCrossEntropyExtendedDistibution(x_theta,
-                    mean_of_distribution, k_max = reconstruction_classes - 1)
-            self.k_max = reconstruction_classes - 1
+                    mean_of_distribution, k_max = number_of_reconstruction_classes - 1)
+            self.k_max = number_of_reconstruction_classes - 1
         
         if self.use_count_sum:
             symbolic_n = T.matrix('n') # sum of counts
