@@ -26,6 +26,26 @@ def main(data_name, cluster_name, splitting_method = "random", splitting_fractio
         splitting_method, splitting_fraction, feature_selection, feature_size,
         filtering_method, clusters)
     
+    print("")
+    
+    analysis_name = "s_" + splitting_method.replace(" ", "_") + "_" \
+        + str(splitting_fraction)
+    
+    if filtering_method:
+        analysis_name += "_f_" + filtering_method[0].replace(" ", "_")
+    
+    if feature_selection:
+        analysis_name += "_fs_" + feature_selection.replace(" ", "_") + "_" \
+            + str(feature_size)
+    
+    data_sets = {"training": training_set,
+                 "validation": validation_set,
+                 "test": test_set}
+    
+    for name, data_set in data_sets.items():
+        analysis.analyseData(data_set, analysis_name + "_" + name)
+    analysis.analyseData(data_sets.values(), name = analysis_name + "_" + "united")
+    
     metadata = {
         "filtering method": filtering_method,
         "splitting method": splitting_method,
