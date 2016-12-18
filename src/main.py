@@ -23,8 +23,8 @@ def main(data_name, cluster_name, splitting_method = "random", splitting_fractio
     
     (training_set, training_headers), (validation_set, validation_headers), \
         (test_set, test_headers) = data.loadCountData(data_name,
-        filtering_method, clusters, feature_selection, feature_size,
-        splitting_method, splitting_fraction)
+        splitting_method, splitting_fraction, feature_selection, feature_size,
+        filtering_method, clusters)
     
     metadata = {
         "filtering method": filtering_method,

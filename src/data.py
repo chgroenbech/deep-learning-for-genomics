@@ -21,32 +21,29 @@ zipped_pickle_extension = ".pkl.gz"
 
 script_directory()
 
-def loadCountData(name, filtering_method = None, clusters = None, feature_selection = None,
-    feature_size = None, splitting_method = "random", splitting_fraction = 0.8):
-    
-    if filtering_method:
-        if filtering_method[0] == splitting_method:
-            raise Error("Splitting and filtering method cannot be the same.")
-        if filtering_method[0] == "clusters":
-            filtering_method[1:] = [clusters[int(c)] for c in filtering_method[1:]]
+def loadCountData(name, splitting_method = "random", splitting_fraction = 0.8,
+    feature_selection = None, feature_size = None,
+    filtering_method = None, cluster_data = None):
     
     if name == "sample":
         data_set = createSampleData(m = 1000, n = 100, scale = 2, p = 0.8)
-        if filtering_method:
-            data_set = filterExamples(data_set, filtering_method = filtering_method)
-        if feature_selection:
-            data_set = selectFeatures(data_set, feature_selection = feature_selection,
-                feature_size = feature_size)
-        training_set, validation_set, test_set = splitDataSet(data_set,
-            splitting_method = splitting_method, splitting_fraction = splitting_fraction)
         
-        training_headers, validation_headers, test_headers = None, None, None
+        index_features = selectFeatureIndices(data_set, feature_selection, feature_size)
+        index_train, index_valid, index_test = splitDataSetIndices(data,
+            splitting_method, splitting_fraction)
+        
+        training_set = data_set[index_train, index_features]
+        validation_set = data_set[index_valid, index_features]
+        test_set = data_set[index_test, index_features]
+        
+        training_headers, validation_headers, test_headers = [None] * 3
     
     else:
         
         (training_set, training_headers), (validation_set, validation_headers), \
-            (test_set, test_headers) = loadSplitDataSets(name, filtering_method,
-            feature_selection, feature_size, splitting_method, splitting_fraction)
+            (test_set, test_headers) = loadSplitDataSets(name, splitting_method,
+                splitting_fraction, feature_selection, feature_size, filtering_method,
+                cluster_data)
     
     return (training_set, training_headers), (validation_set, validation_headers), \
         (test_set, test_headers)
@@ -56,7 +53,6 @@ def loadClusterData(name):
     cluster_path = data_path(name + text_extension)
     
     clusters = {}
-    # cluster_ids = {}
     
     print("Loading cluster data from {}.".format(cluster_path))
     
@@ -67,7 +63,6 @@ def loadClusterData(name):
                 continue
                 
             cell, cluster_id = line.split("\t")
-            # cluster_ids[cell] = cluster_id
             
             cluster_id = int(cluster_id)
             
@@ -80,15 +75,19 @@ def loadClusterData(name):
     
     return clusters
 
-def loadSplitDataSets(name, filtering_method, feature_selection, feature_size,
-    splitting_method, splitting_fraction):
+def loadSplitDataSets(name, splitting_method = "random", splitting_fraction = 0.8,
+    feature_selection = None, feature_size = None,
+    filtering_method = None, cluster_data = None):
     
     split_data_sets_name = name
+    split_data_sets_name += "_s_" + splitting_method.replace(" ", "_") + "_" + str(splitting_fraction)
     if filtering_method:
         split_data_sets_name += "_f_" + filtering_method[0].replace(" ", "_")
+        if filtering_method[0] == "clusters":
+            split_data_sets_name += "_" + "_".join(filtering_method[1:])
+            filtering_method[1:] = [clusters[int(c)] for c in filtering_method[1:]]
     if feature_selection:
         split_data_sets_name += "_fs_" + feature_selection.replace(" ", "_") + "_" + str(feature_size)
-    split_data_sets_name += "_s_" + splitting_method.replace(" ", "_") + "_" + str(splitting_fraction)
     split_data_sets_path = preprocessed_path(split_data_sets_name +
         zipped_pickle_extension)
     
@@ -97,18 +96,36 @@ def loadSplitDataSets(name, filtering_method, feature_selection, feature_size,
         (training_set, validation_set, test_set), \
             (training_headers, validation_headers, test_headers) = \
             loadSparseData(split_data_sets_path)
-        print("Split data sets loaded.")
+        print("Split data sets loaded as " +
+              "training ({} examples), ".format(training_set.shape[0]) +
+              "validation ({} examples), ".format(validation_set.shape[0]) +
+              "and test ({} examples) sets ".format(test_set.shape[0]) +
+              "with {} features.".format(training_set.shape[1]))
     else:
-        if feature_selection:
-            data_set, data_headers = loadFeatureSelectedDataSet(name, filtering_method,
-                feature_selection, feature_size)
-        elif filtering_method:
-            data_set, data_headers = loadFilteredDataSet(name, filtering_method)
-        else:
-            data_set, data_headers = loadDataSet(name)
-        (training_set, training_headers), (validation_set, validation_headers), \
-            (test_set, test_headers) = splitDataSet(data_set, data_headers,
-            splitting_method, splitting_fraction)
+        
+        data_set, data_headers = loadDataSet(name)
+        
+        print("Splitting data set and selecting features.")
+        
+        index_features = selectFeatureIndices(data_set, feature_selection, feature_size)
+        index_train, index_valid, index_test = splitDataSetIndices(data_set,
+            splitting_method, splitting_fraction, data_headers, filtering_method)
+        
+        training_set = data_set[index_train][:, index_features]
+        validation_set = data_set[index_valid][:, index_features]
+        test_set = data_set[index_test][:, index_features]
+        
+        training_headers = {"cells": data_headers["cells"][index_train],
+            "genes": data_headers["genes"][index_features]}
+        validation_headers = {"cells": data_headers["cells"][index_valid],
+            "genes": data_headers["genes"][index_features]}
+        test_headers = {"cells": data_headers["cells"][index_test],
+            "genes": data_headers["genes"][index_features]}
+        
+        print("Data split into training ({} examples), ".format(len(index_train)) +
+              "validation ({} examples), ".format(len(index_valid)) +
+              "and test ({} examples) sets ".format(len(index_test)) +
+              "with {} features.".format(len(index_features)))
         
         print("Saving split data.")
         saveSparseData([training_set, validation_set, test_set],
@@ -118,62 +135,10 @@ def loadSplitDataSets(name, filtering_method, feature_selection, feature_size,
     return (training_set, training_headers), (validation_set, validation_headers), \
         (test_set, test_headers)
 
-def loadFeatureSelectedDataSet(name, filtering_method, feature_selection, feature_size):
-    
-    feature_selected_data_set_name = name
-    if filtering_method:
-        feature_selected_data_set_name += "_f_" + filtering_method[0].replace(" ", "_")
-    feature_selected_data_set_name += "_fs_" + feature_selection.replace(" ", "_") + "_" + \
-        str(feature_size)
-    feature_selected_data_set_path = \
-        preprocessed_path(feature_selected_data_set_name + zipped_pickle_extension)
-    
-    if os.path.isfile(feature_selected_data_set_path):
-        print("Loading feature selected data sets from {}.".format(feature_selected_data_set_path))
-        feature_selected_data_set, feature_selected_data_headers = \
-            loadSparseData(feature_selected_data_set_path)
-        print("Feature selected data set loaded.")
-    else:
-        if filtering_method:
-            data_set, data_headers = loadFilteredDataSet(name, filtering_method)
-        else:
-            data_set, data_headers = loadDataSet(name)
-        feature_selected_data_set, feature_selected_data_headers = \
-            selectFeatures(data_set, data_headers, feature_selection, feature_size)
-        print("Saving feature selected data set.")
-        saveSparseData(feature_selected_data_set, feature_selected_data_headers,
-            feature_selected_data_set_path)
-        print("Saved feature selected data set as {}.".format(feature_selected_data_set_path))
-    
-    return feature_selected_data_set, feature_selected_data_headers
-
-def loadFilteredDataSet(name, filtering_method):
-    
-    filtered_data_set_name = name + "_f_" + filtering_method[0].replace(" ", "_")
-    filtered_data_set_path = preprocessed_path(filtered_data_set_name +
-        zipped_pickle_extension)
-    
-    if os.path.isfile(filtered_data_set_path):
-        print("Loading filtered data set from {}.".format(filtered_data_set_path))
-        filtered_data_set, filtered_data_headers = \
-            loadSparseData(filtered_data_set_path)
-        print("Filtered data set loaded.")
-    else:
-        data_set, data_headers = loadDataSet(name)
-        filtered_data_set, filtered_data_headers = filterExamples(data_set,
-            data_headers, filtering_method)
-        print("Saving filtered data set.")
-        saveSparseData(filtered_data_set, filtered_data_headers,
-            filtered_data_set_path)
-        print("Saved filtered data set as {}.".format(filtered_data_set_path))
-    
-    return filtered_data_set, filtered_data_headers
-
 def loadDataSet(name):
     
     original_data_path = data_path(name + zipped_text_extension)
-    sparse_data_path = preprocessed_path(name + "_sparse" +
-        zipped_pickle_extension)
+    sparse_data_path = preprocessed_path(name + "_sparse" + zipped_pickle_extension)
     
     if os.path.isfile(sparse_data_path):
         print("Loading original data set in sparse representation from {}.".format(sparse_data_path))
@@ -214,46 +179,7 @@ def createSampleData(m = 100, n = 20, scale = 2, p = 0.5):
     
     return data
 
-def filterExamples(data, headers = None, filtering_method = None):
-    
-    print("Filtering examples.")
-    
-    N = data.shape[0]
-    
-    if filtering_method[0] == "Macosko":
-        
-        minimum_genes_expressed = 900
-        
-        N_non_zero_elements = (data != 0).sum(axis = 1)
-        
-        index_examples = nonzero(N_non_zero_elements > minimum_genes_expressed)[0]
-    
-    elif filtering_method[0] == "clusters":
-        
-        index_examples = []
-            
-        for cluster in filtering_method[1:]:
-            
-            for cell in cluster:
-                index = where(headers["cells"] == cell)[0]
-                if len(index) == 0:
-                    continue
-                index_examples.append(int(index))
-    
-    elif filtering_method is None:
-        index_examples = slice(N)
-    
-    print("Filtered examples with {} remaining.".format(len(index_examples)))
-    
-    if headers:
-        headers["cells"] = headers["cells"][index_examples]
-        return data[index_examples], headers
-    else:
-        return data[index_examples]
-
-def selectFeatures(data, headers = None, feature_selection = None, feature_size = None):
-    
-    print("Selecting features.")
+def selectFeatureIndices(data, feature_selection = None, feature_size = None):
     
     D = data.shape[1]
     
@@ -263,27 +189,19 @@ def selectFeatures(data, headers = None, feature_selection = None, feature_size 
     if feature_selection == "high_variance":
         
         data_variance = data.var(axis = 0)
-        index_feature_variance_sorted = argsort(data_variance)
+        index_features_variance_sorted = argsort(data_variance)
         
-        index_feature = index_feature_variance_sorted[-feature_size:]
+        index_features = index_features_variance_sorted[-feature_size:]
         
-        index_feature = sort(index_feature)
+        index_features = sort(index_features)
     
     elif feature_selection is None:
-        index_feature = slice(D)
+        index_features = slice(D)
     
-    print("Filtered features with {} remaining.".format(len(index_feature)))
-    
-    if headers:
-        headers["genes"] = headers["genes"][index_feature]
-        return data[:, index_feature], headers
-    else:
-        return data[:, index_feature]
+    return index_features
 
-def splitDataSet(data, headers = None, splitting_method = "random",
-    splitting_fraction = 0.8):
-    
-    print("Splitting data set.")
+def splitDataSetIndices(data, splitting_method = "random", splitting_fraction = 0.8,
+    headers = None, filtering_method = None):
     
     N, D = data.shape
     
@@ -299,7 +217,6 @@ def splitDataSet(data, headers = None, splitting_method = "random",
         index_test = slice(V, N)
         
     # Combine training set of cells (rows, i) expressing more than 900 genes.
-    # TODO Splitting the Macosko way after selecting features only counts the selected features and not all features
     elif splitting_method == "Macosko":
         
         minimum_genes_expressed = 900
@@ -318,25 +235,24 @@ def splitDataSet(data, headers = None, splitting_method = "random",
         index_valid = index_test_valid[:V]
         index_test = index_test_valid[V:]
     
-    print(splitting_method)
+    if filtering_method[0] == "clusters":
+        
+        clusters = filtering_method[1:]
+        index_examples = set()
+            
+        for cluster in clusters:
+            
+            for cell in cluster:
+                index = where(headers["cells"] == cell)[0]
+                if len(index) == 0:
+                    continue
+                index_examples.add(int(index))
+        
+        index_train = [i for i in index_train if i in index_examples]
+        index_valid = [i for i in index_valid if i in index_examples]
+        index_test = [i for i in index_test if i in index_examples]
     
-    training_set = data[index_train]
-    validation_set = data[index_valid]
-    test_set = data[index_test]
-    
-    print("Data split into training ({} examples), validation ({} examples), and test ({} examples) sets.".format(training_set.shape[0], validation_set.shape[0], test_set.shape[0]))
-    
-    if headers:
-        training_headers = {"cells": headers["cells"][index_train],
-            "genes": headers["genes"]}
-        validation_headers = {"cells": headers["cells"][index_valid],
-            "genes": headers["genes"]}
-        test_headers = {"cells": headers["cells"][index_test],
-            "genes": headers["genes"]}
-        return (training_set, training_headers), (validation_set, validation_headers), \
-            (test_set, test_headers)
-    else:
-        return training_set, validation_set, test_set
+    return index_train, index_valid, index_test
 
 def loadOriginalData(file_path):
     
@@ -531,3 +447,8 @@ cluster_colours = {
 
 if __name__ == '__main__':
     script_directory()
+    clusters = loadClusterData("retina_clusteridentities")
+    loadCountData("GSE63472_P14Retina_merged_digital_expression",
+        filtering_method = ["clusters", "2", "25", "36", "37"], cluster_data = clusters,
+        feature_selection = "high_variance", feature_size = 5000,
+        splitting_method = "Macosko", splitting_fraction = 0.8)
