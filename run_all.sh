@@ -12,31 +12,27 @@ SPLITTING_FRACTION=0.8
 FEATURE_SELECTION="high_variance"
 FEATURE_SIZE=5000
 RECONSTRUCTION_DISTRIBUTIONS="bernoulli poisson negative_binomial zero_inflated_poisson zero_inflated_negative_binomial"
-NUMBERS_OF_RECONSTRUCTION_CLASSES="0 11"
-# RECONSTRUCTION_CLASSES=11
-NUMBERS_OF_EPOCHS="5"
-# NUMBERS_OF_EPOCHS="10 20 50"
+NUMBERS_OF_RECONSTRUCTION_CLASSES="0 6"
+# NUMBERS_OF_EPOCHS="1"
+NUMBERS_OF_EPOCHS="20"
 # NUMBERS_OF_EPOCHS="50"
 BATCH_SIZE=100
 # LEARNING_RATE=1e-4
 LEARNING_RATE=1e-3
 # LEARNING_RATE=1e-2
 
-for use_count_sum in "" "--use-count-sum"
-do
-	./src/main.py --data-name $DATA_NAME --cluster-name $CLUSTER_NAME \
-                  --latent-sizes $LATENT_SIZES \
-                  --hidden-structure $HIDDEN_STRUCTURE \
-                  --splitting-method $SPLITTING_METHOD \
-                  --splitting-fraction $SPLITTING_FRACTION \
-                  --filtering-method $FILTERING_METHOD \
-                  --feature-selection $FEATURE_SELECTION \
-                  --feature-size $FEATURE_SIZE \
-                  --reconstruction-distributions $RECONSTRUCTION_DISTRIBUTIONS \
-                  --numbers-of-reconstruction-classes $NUMBERS_OF_RECONSTRUCTION_CLASSES \
-                  --numbers-of-epochs $NUMBERS_OF_EPOCHS \
-                  --batch-size $BATCH_SIZE \
-                  --learning-rate $LEARNING_RATE \
-                  $use_count_sum
-                  $1
-done
+./src/main.py --data-name $DATA_NAME --cluster-name $CLUSTER_NAME \
+              --latent-sizes $LATENT_SIZES \
+              --hidden-structure $HIDDEN_STRUCTURE \
+              --splitting-method $SPLITTING_METHOD \
+              --splitting-fraction $SPLITTING_FRACTION \
+              --filtering-method $FILTERING_METHOD \
+              --feature-selection $FEATURE_SELECTION \
+              --feature-size $FEATURE_SIZE \
+              --reconstruction-distributions $RECONSTRUCTION_DISTRIBUTIONS \
+              --numbers-of-reconstruction-classes $NUMBERS_OF_RECONSTRUCTION_CLASSES \
+              --numbers-of-epochs $NUMBERS_OF_EPOCHS \
+              --batch-size $BATCH_SIZE \
+              --learning-rate $LEARNING_RATE \
+              $1
+              # $use_count_sum \

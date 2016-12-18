@@ -475,7 +475,6 @@ def log_zero_inflated_poisson(x, pi, log_lambda, eps = 0.0):
     
     return y
 
-# TODO Gives NaNs?
 def log_zero_inflated_negative_binomial(x, pi, p, log_r, eps = 0.0):
     
     pi = T.clip(pi, eps, 1.0 - eps)
