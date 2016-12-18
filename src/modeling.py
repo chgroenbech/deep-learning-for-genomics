@@ -80,13 +80,24 @@ class VariationalAutoEncoderForCounts(object):
         if reconstruction_distribution:
             
             if type(reconstruction_distribution) == str:
-                reconstruction_distribution = \
-                    reconstruction_distributions[reconstruction_distribution]
+                if number_of_reconstruction_classes > 0:
+                    reconstruction_distribution = "softmax_" + \
+                        reconstruction_distribution
+                    self.k_max = number_of_reconstruction_classes - 1
+                    reconstruction_distribution = \
+                        reconstruction_distributions[reconstruction_distribution]
+                    reconstruction_distribution = \
+                        reconstruction_distribution(self.k_max)
+                else:
+                    reconstruction_distribution = \
+                        reconstruction_distributions[reconstruction_distribution]
             
             self.x_parameters = reconstruction_distribution["parameters"]
             self.reconstruction_activation_functions = \
                 reconstruction_distribution["activation functions"]
-            self.expectedNegativeReconstructionError = reconstruction_distribution["function"]
+            
+            self.expectedNegativeReconstructionError = \
+                reconstruction_distribution["function"]
             self.meanOfReconstructionDistribution = reconstruction_distribution["mean"]
             self.preprocess = reconstruction_distribution["preprocess"]
         else:
@@ -103,20 +114,20 @@ class VariationalAutoEncoderForCounts(object):
             self.meanOfReconstructionDistribution = lambda x_theta: x_theta["mu"]
             self.preprocess = lambda x: x
         
-        if number_of_reconstruction_classes > 0:
-            
-            self.x_parameters += ["p_k"]
-            self.reconstruction_activation_functions["p_k"] = softmax
-            log_distribution = self.expectedNegativeReconstructionError
-            self.expectedNegativeReconstructionError = lambda x, x_theta, eps = 0.0: \
-                log_cross_entropy_extended(x, x_theta,
-                    log_distribution, k_max = number_of_reconstruction_classes - 1,
-                    eps = 0.0)
-            mean_of_distribution = self.meanOfReconstructionDistribution
-            self.meanOfReconstructionDistribution = lambda x_theta: \
-                meanOfCrossEntropyExtendedDistibution(x_theta,
-                    mean_of_distribution, k_max = number_of_reconstruction_classes - 1)
-            self.k_max = number_of_reconstruction_classes - 1
+        # if number_of_reconstruction_classes > 0:
+        #
+        #     self.x_parameters += ["p_k"]
+        #     self.reconstruction_activation_functions["p_k"] = softmax
+        #     log_distribution = self.expectedNegativeReconstructionError
+        #     self.expectedNegativeReconstructionError = lambda x, x_theta, eps = 0.0: \
+        #         log_cross_entropy_extended(x, x_theta,
+        #             log_distribution, k_max = number_of_reconstruction_classes - 1,
+        #             eps = 0.0)
+        #     mean_of_distribution = self.meanOfReconstructionDistribution
+        #     self.meanOfReconstructionDistribution = lambda x_theta: \
+        #         meanOfCrossEntropyExtendedDistibution(x_theta,
+        #             mean_of_distribution, k_max = number_of_reconstruction_classes - 1)
+        #     self.k_max = number_of_reconstruction_classes - 1
         
         if self.use_count_sum:
             symbolic_n = T.matrix('n') # sum of counts
@@ -555,6 +566,37 @@ def meanOfSoftmaxPoissonDistribution(p_k, log_lambda, k_max):
     
     return mean
 
+def log_softmax_negative_binomial(x, p_k, p, log_r, k_max = 10, eps = 0.0):
+    
+    F = x.shape[1]
+    
+    p_k = T.clip(p_k, eps, 1.0 - eps)
+    x_k = T.clip(x, 0, k_max)
+    
+    p_k = T.reshape(p_k, (-1, k_max + 1))
+    x_k = T.reshape(x_k, (-1, 1))
+    
+    y_cross_entropy = objectives.categorical_crossentropy(p_k, x_k)
+    y_cross_entropy = T.reshape(y_cross_entropy, (-1, F))
+    
+    y_log_negative_binomial = T.ge(x, k_max) \
+        * log_negative_binomial(x - k_max, p, log_r, eps)
+
+    y = - y_cross_entropy + y_log_negative_binomial
+    
+    return y
+
+def meanOfSoftmaxNegativeBinomialDistribution(p_k, r, log_r, k_max):
+    
+    mean = numpy.argmax(p_k, axis = -1).astype("float64")
+    
+    k_max_indices = mean == k_max
+    
+    mean[k_max_indices] += meanOfNegativeBinomialDistribution(r[k_max_indices],
+        log_r[k_max_indices])
+    
+    return mean
+
 reconstruction_distributions = {
     "bernoulli": {
         "parameters": ["p"],
@@ -617,17 +659,34 @@ reconstruction_distributions = {
         "preprocess": lambda x: x
     },
     
-    "softmax_poisson": {
+    "softmax_poisson": lambda k_max: {
         "parameters": ["p_k", "log_lambda"],
         "activation functions": {
             "p_k": softmax,
             "log_lambda": lambda x: T.clip(x, -10, 10)
         },
         "function": lambda x, x_theta, eps = 0.0: \
-            log_softmax_poisson(x, x_theta["p_k"], x_theta["log_lambda"], k_max = 10,
+            log_softmax_poisson(x, x_theta["p_k"], x_theta["log_lambda"], k_max,
                 eps = eps),
         "mean": lambda x_theta: \
-            meanOfSoftmaxPoissonDistribution(x_theta["p_k"], x_theta["log_lambda"], k_max = 10),
+            meanOfSoftmaxPoissonDistribution(x_theta["p_k"], x_theta["log_lambda"],
+                k_max),
+        "preprocess": lambda x: x
+    },
+    
+    "softmax_negative_binomial": lambda k_max: {
+        "parameters": ["p_k", "p", "log_r"],
+        "activation functions": {
+            "p_k": softmax,
+            "p": sigmoid,
+            "log_r": lambda x: T.clip(x, -10, 10)
+        },
+        "function": lambda x, x_theta, eps = 0.0: \
+            log_softmax_negative_binomial(x, x_theta["p_k"], x_theta["p"],
+                x_theta["log_r"], k_max, eps = eps),
+        "mean": lambda x_theta: \
+            meanOfSoftmaxNegativeBinomialDistribution(x_theta["p_k"], x_theta["p"],
+                x_theta["log_r"], k_max),
         "preprocess": lambda x: x
     }
 }
