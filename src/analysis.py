@@ -15,25 +15,27 @@ seaborn.set(style='ticks', palette = palette)
 
 pyplot.rcParams.update({'figure.max_open_warning': 0})
 
-def analyseData(data_set, name = "data", intensive_calculations = False):
+def analyseData(data_sets, name = "data", intensive_calculations = False):
     
-    name = "Data/" + name
+    name = "Data/" + name +"/"
     
-    if type(data_set) == list:
-        data_set = concatenate([d for d in data_set], axis = 0)
+    if type(data_sets) == dict:
+        united_data_set = concatenate([data_sets[d] for d in data_sets], axis = 0)
+        data_sets["united"] = united_data_set
     else:
-        data_set = data_set
+        data_sets = {"no name": data_sets}
     
-    # M, F = data_set.shape
-    #
-    # print("Data set with {} examples and {} features.".format(M, F))
+    statistics_set = []
+    for data_set_name, data_set in data_sets.items():
+        plot_name = name + data_set_name
+        plotCountHistogram(data_set, k_min = 1, k_max = 10,
+            name = plot_name)
+        if intensive_calculations:
+            plotHeatMap(data_set, name = plot_name)
+        statistics_set.append(statistics(data_set, name = data_set_name,
+            tolerance = 0.5))
     
-    printSummaryStatistics(statistics(data_set, name = name, tolerance = 0.5))
-    
-    plotCountHistogram(data_set, k_min = 1, k_max = 10, name = name)
-    
-    if intensive_calculations:
-        plotHeatMap(data_set, name)
+    printSummaryStatistics(statistics_set)
     
     # average_genes_per_cell = data_set.sum(axis = 1)
     # print(average_genes_per_cell.std() / average_genes_per_cell.mean())

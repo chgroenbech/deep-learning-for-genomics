@@ -28,23 +28,14 @@ def main(data_name, cluster_name, splitting_method = "random", splitting_fractio
     
     print("")
     
-    analysis_name = "s_" + splitting_method.replace(" ", "_") + "_" \
-        + str(splitting_fraction)
-    
-    if filtering_method:
-        analysis_name += "_f_" + filtering_method[0].replace(" ", "_")
-    
-    if feature_selection:
-        analysis_name += "_fs_" + feature_selection.replace(" ", "_") + "_" \
-            + str(feature_size)
+    data_set_base_name = data.dataSetBaseName(splitting_method, splitting_fraction,
+        filtering_method, feature_selection, feature_size)
     
     data_sets = {"training": training_set,
                  "validation": validation_set,
                  "test": test_set}
     
-    for name, data_set in data_sets.items():
-        analysis.analyseData(data_set, analysis_name + "_" + name)
-    analysis.analyseData(data_sets.values(), name = analysis_name + "_" + "united")
+    analysis.analyseData(data_sets, name = data_set_base_name)
     
     metadata = {
         "filtering method": filtering_method,

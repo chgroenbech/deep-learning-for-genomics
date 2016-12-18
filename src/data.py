@@ -317,22 +317,29 @@ def saveSparseData(data, headers, file_path):
         pickle.dump(sparse_data, data_file)
         pickle.dump(headers, data_file)
 
+def dataSetBaseName(splitting_method, splitting_fraction,
+    filtering_method, feature_selection, feature_size):
+    
+    base_name = "s_" + splitting_method.replace(" ", "_") + "_" \
+        + str(splitting_fraction)
+    
+    if filtering_method:
+        base_name += "_f_" + filtering_method[0].replace(" ", "_")
+    
+    if feature_selection:
+        base_name += "_fs_" + feature_selection.replace(" ", "_") + "_" \
+            + str(feature_size)
+    
+    return base_name
+
 def modelName(base_name, filtering_method, feature_selection, feature_size,
     splitting_method, splitting_fraction, reconstruction_distribution, use_count_sum,
     reconstruction_classes, latent_size, hidden_structure, learning_rate,
     batch_size, number_of_epochs):
     
-    model_name = base_name
-    
-    model_name += "_s_" + splitting_method.replace(" ", "_") + "_" \
-        + str(splitting_fraction)
-    
-    if filtering_method:
-        model_name += "_f_" + filtering_method[0].replace(" ", "_")
-    
-    if feature_selection:
-        model_name += "_fs_" + feature_selection.replace(" ", "_") + "_" \
-            + str(feature_size)
+    model_name = base_name + "_" + \
+        dataSetBaseName(splitting_method, splitting_fraction,
+        filtering_method, feature_selection, feature_size)
     
     model_name += "_r_" + reconstruction_distribution.replace(" ", "_")
     
