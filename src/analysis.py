@@ -5,7 +5,7 @@ import data
 from matplotlib import pyplot
 import seaborn
 
-from numpy import linspace, random, nonzero, where, inf, log, exp, empty, arange
+from numpy import linspace, random, nonzero, where, inf, log, exp, empty, arange, concatenate
 from sklearn.decomposition import PCA
 
 from aux import labelWithDefaultSymbol
@@ -17,20 +17,23 @@ pyplot.rcParams.update({'figure.max_open_warning': 0})
 
 def analyseData(data_set, name = "data", intensive_calculations = False):
     
-    N, D = data_set.shape
+    name = "Data/" + name
+    
+    if type(data_set) == list:
+        data_set = concatenate([d for d in data_set], axis = 0)
+    else:
+        data_set = data_set
+    
+    # M, F = data_set.shape
+    #
+    # print("Data set with {} examples and {} features.".format(M, F))
+    
+    printSummaryStatistics(statistics(data_set, name = name, tolerance = 0.5))
+    
+    plotCountHistogram(data_set, k_min = 1, k_max = 10, name = name)
     
     if intensive_calculations:
         plotHeatMap(data_set, name)
-    
-    average_cell = data_set.mean(axis = 0)
-    average_cell_name = name + "/mean"
-    plotProfile(average_cell, average_cell_name)
-    
-    subset = random.randint(N, size = 10)
-    for j, i in enumerate(subset):
-        cell = data_set[i]
-        cell_name = name + "/cell_{}".format(j)
-        plotProfile(cell, cell_name)
     
     # average_genes_per_cell = data_set.sum(axis = 1)
     # print(average_genes_per_cell.std() / average_genes_per_cell.mean())
@@ -111,7 +114,9 @@ def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
                 cell_diff = cell_test - cell_recon
                 cell_diff_name = name + "/cell_{}_diff".format(j)
                 plotProfile(cell_diff, label() + "$-$" + label(variable_name), cell_diff_name)
-        
+    
+    # TODO Add up differences and log-ratios to compare different models.
+    
 
 def statistics(data_set, name = "", tolerance = 1e-3):
     
@@ -147,13 +152,60 @@ def printSummaryStatistics(statistics_sets):
             "{:<4.2f}".format(statistics_set["mean"]),
             "{:<4.2g}".format(statistics_set["std"]),
             "{:<9.3g}".format(statistics_set["min"]),
-            "{:>7d}".format(statistics_set["minimums"]),
+            "{:<7.3g}".format(statistics_set["minimums"]),
             "{:<9.3g}".format(statistics_set["max"]),
-            "{:>7d}".format(statistics_set["maximums"]),
+            "{:<7.3g}".format(statistics_set["maximums"]),
             "{:<7.5g}".format(statistics_set["sparsity"]),
         ]
         
         print("  ".join(string_parts))
+
+def plotCountHistogram(data_set, k_min, k_max, name = None):
+    
+    figure_name = "count_histogram"
+    
+    if name:
+        figure_name = name + "_" + figure_name
+    
+    k = linspace(0, k_max, k_max + 1)
+    C = empty(k_max + 1)
+    
+    for i in range(k_max + 1):
+        if k[i] < k_max:
+            c = (data_set == k[i]).sum()
+        if k[i] == k_max:
+            c = (data_set >= k_max).sum()
+        C[i] = c
+    
+    figure = pyplot.figure()
+    axis = figure.add_subplot(1, 1, 1)
+    
+    axis.bar(k, C)
+    
+    axis.set_yscale("log")
+    
+    axis.set_xlabel("Counts")
+    axis.set_ylabel("Number of counts")
+    
+    data.saveFigure(figure, figure_name)
+    
+    for i in reversed(range(k_min, k_max + 1)):
+        
+        figure = pyplot.figure()
+        axis = figure.add_subplot(1, 1, 1)
+        
+        if i < k_max:
+            C[i] += C[i + 1]
+            C[i + 1] = 0
+
+        axis.bar(k[:i+1], C[:i+1])
+    
+        axis.set_yscale("log")
+    
+        axis.set_xlabel("Counts")
+        axis.set_ylabel("Number of counts")
+        
+        data.saveFigure(figure, figure_name + "_" + str(i))
 
 def plotProfile(cell, label, name = None):
     
@@ -177,7 +229,7 @@ def plotProfile(cell, label, name = None):
     data.saveFigure(figure, figure_name)
 
 def plotHeatMap(data_set, data_set_headers = None, clusters = None, center = None,
-    name = None):
+    simple = False, name = None):
     
     figure_name = "heat_map"
     
@@ -217,8 +269,8 @@ def plotHeatMap(data_set, data_set_headers = None, clusters = None, center = Non
     figure = pyplot.figure()
     axis = figure.add_subplot(1, 1, 1)
     
-    seaborn.heatmap(data_set.T, xticklabels = False, yticklabels = False, cbar = True,
-        square = True, center = center, ax = axis)
+    seaborn.heatmap(data_set.T, xticklabels = False, yticklabels = False,
+        cbar = True, square = True, center = center, ax = axis)
     
     axis.set_xlabel("Cell")
     axis.set_ylabel("Gene")
@@ -322,5 +374,10 @@ def plotLatentSpace(latent_set, latent_set_headers = None, clusters = None, name
 
 if __name__ == '__main__':
     random.seed(1234)
-    data_set = data.createSampleData(1000, 500, p = 0.95)
-    analyseData(data_set, name = "sample", intensive_calculations = True)
+    
+    # data_set = data.createSampleData(1000, 500, p = 0.95)
+    # analyseData(data_set, name = "sample")
+    
+    # data_set, _ = data.loadDataSet("GSE63472_P14Retina_merged_digital_expression")
+    # analyseData(data_set, name = "Data/all")
+    
