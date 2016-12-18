@@ -485,7 +485,7 @@ def log_zero_inflated_negative_binomial(x, pi, p, log_r, eps = 0.0):
     r = T.exp(log_r)
     r = T.clip(r, eps, r)
     
-    y_0 = T.log(pi + (1 - pi) * r * T.log(1 - p))
+    y_0 = T.log(pi + (1 - pi) * T.pow(1 - p, r))
     y_1 = T.log(1 - pi) + log_negative_binomial(x, p, log_r, eps)
     
     y = T.eq(x, 0) * y_0 + T.gt(x, 0) * y_1
