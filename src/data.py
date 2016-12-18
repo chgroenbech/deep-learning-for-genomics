@@ -5,7 +5,7 @@ import pickle
 import os
 
 from pandas import read_csv
-from numpy import random, array, zeros, nonzero, sort, argsort, where
+from numpy import random, array, zeros, nonzero, sort, argsort, where, arange
 from scipy.sparse import csr_matrix
 
 from seaborn import despine
@@ -29,7 +29,7 @@ def loadCountData(name, splitting_method = "random", splitting_fraction = 0.8,
         data_set = createSampleData(m = 1000, n = 100, scale = 2, p = 0.8)
         
         index_features = selectFeatureIndices(data_set, feature_selection, feature_size)
-        index_train, index_valid, index_test = splitDataSetIndices(data,
+        index_train, index_valid, index_test = splitDataSetIndices(data_set,
             splitting_method, splitting_fraction)
         
         training_set = data_set[index_train, index_features]
@@ -203,6 +203,9 @@ def selectFeatureIndices(data, feature_selection = None, feature_size = None):
 def splitDataSetIndices(data, splitting_method = "random", splitting_fraction = 0.8,
     headers = None, filtering_method = None):
     
+    if filtering_method and filtering_method[0] == splitting_method:
+        raise Error("Filtering method and spitting method can't be the same.")
+    
     N, D = data.shape
     
     if splitting_method == "random":
@@ -212,9 +215,9 @@ def splitDataSetIndices(data, splitting_method = "random", splitting_fraction = 
         
         random.shuffle(data)
         
-        index_train = slice(T)
-        index_valid = slice(T, V)
-        index_test = slice(V, N)
+        index_train = arange(T)
+        index_valid = arange(T, V)
+        index_test = arange(V, N)
         
     # Combine training set of cells (rows, i) expressing more than 900 genes.
     elif splitting_method == "Macosko":
@@ -235,18 +238,29 @@ def splitDataSetIndices(data, splitting_method = "random", splitting_fraction = 
         index_valid = index_test_valid[:V]
         index_test = index_test_valid[V:]
     
-    if filtering_method[0] == "clusters":
+    if filtering_method:
         
-        clusters = filtering_method[1:]
-        index_examples = set()
+        if filtering_method[0] == "clusters":
+        
+            clusters = filtering_method[1:]
+            index_examples = set()
             
-        for cluster in clusters:
+            for cluster in clusters:
             
-            for cell in cluster:
-                index = where(headers["cells"] == cell)[0]
-                if len(index) == 0:
-                    continue
-                index_examples.add(int(index))
+                for cell in cluster:
+                    index = where(headers["cells"] == cell)[0]
+                    if len(index) == 0:
+                        continue
+                    index_examples.add(int(index))
+        
+        elif filtering_method[0] == "Macosko":
+            
+            minimum_genes_expressed = 900
+        
+            N_non_zero_elements = (data != 0).sum(axis = 1)
+        
+            index_examples = nonzero(N_non_zero_elements > minimum_genes_expressed)[0]
+            index_examples = set(index_examples)
         
         index_train = [i for i in index_train if i in index_examples]
         index_valid = [i for i in index_valid if i in index_examples]
@@ -310,15 +324,15 @@ def modelName(base_name, filtering_method, feature_selection, feature_size,
     
     model_name = base_name
     
+    model_name += "_s_" + splitting_method.replace(" ", "_") + "_" \
+        + str(splitting_fraction)
+    
     if filtering_method:
         model_name += "_f_" + filtering_method[0].replace(" ", "_")
     
     if feature_selection:
         model_name += "_fs_" + feature_selection.replace(" ", "_") + "_" \
             + str(feature_size)
-    
-    model_name += "_s_" + splitting_method.replace(" ", "_") + "_" \
-        + str(splitting_fraction)
     
     model_name += "_r_" + reconstruction_distribution.replace(" ", "_")
     
@@ -449,6 +463,6 @@ if __name__ == '__main__':
     script_directory()
     clusters = loadClusterData("retina_clusteridentities")
     loadCountData("GSE63472_P14Retina_merged_digital_expression",
-        filtering_method = ["clusters", "2", "25", "36", "37"], cluster_data = clusters,
+        filtering_method = ["Macosko"],
         feature_selection = "high_variance", feature_size = 5000,
-        splitting_method = "Macosko", splitting_fraction = 0.8)
+        splitting_method = "random", splitting_fraction = 0.8)
