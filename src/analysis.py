@@ -27,13 +27,14 @@ def analyseData(data_sets, name = "data", intensive_calculations = False):
     
     label = labelWithDefaultSymbol("x")
     statistics_set = []
-    normed = True
+    normed = False
+    # normed = True
     
     for data_set_name, data_set in data_sets.items():
         
         M, F = data_set.shape
 
-        print(data_set_name.title() + "({} examples, {} features):".format(M,F))
+        print(data_set_name.title() + " ({} examples, {} features):".format(M,F))
         
         plot_name = base_name + data_set_name
         
@@ -42,7 +43,7 @@ def analyseData(data_sets, name = "data", intensive_calculations = False):
         
         plotHistogram(data_set.flatten(), "Counts", "log", normed=normed, name = plot_name)
         
-        if intensive_calculations:
+        if M < 14000 and F <= 5000:
             plotHeatMap(data_set, name = plot_name)
         
         series_set = [
@@ -438,5 +439,5 @@ if __name__ == '__main__':
     # analyseData(data_set, name = "sample")
     
     data_set, _ = data.loadDataSet("GSE63472_P14Retina_merged_digital_expression")
-    analyseData(data_set, name = "All_normed_")
+    analyseData(data_set, name = "All")
     
