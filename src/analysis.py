@@ -17,28 +17,61 @@ pyplot.rcParams.update({'figure.max_open_warning': 0})
 
 def analyseData(data_sets, name = "data", intensive_calculations = False):
     
-    name = "Data/" + name +"/"
+    base_name = "Data/" + name +"/"
     
     if type(data_sets) == dict:
         united_data_set = concatenate([data_sets[d] for d in data_sets], axis = 0)
         data_sets["united"] = united_data_set
     else:
-        data_sets = {"no name": data_sets}
+        data_sets = {name: data_sets}
     
+    label = labelWithDefaultSymbol("x")
     statistics_set = []
+    
     for data_set_name, data_set in data_sets.items():
-        plot_name = name + data_set_name
+        
+        print(data_set_name.title() + ":")
+        
+        plot_name = base_name + data_set_name
+        
         plotCountHistogram(data_set, k_min = 1, k_max = 10,
             name = plot_name)
+        
+        plotHistogram(data_set.flatten(), "Counts", "log", plot_name)
+        
         if intensive_calculations:
             plotHeatMap(data_set, name = plot_name)
+        
+        series_set = [
+            {"name": plot_name + "_genes", "label": "Total counts per gene",
+             "per": "Genes", "values": data_set.sum(axis = 0)},
+            {"name": plot_name + "_cells", "label": "Total counts per cell",
+             "per": "Cells", "values": data_set.sum(axis = 1)},
+            {"name": plot_name + "_genes_expressed",
+             "label": "Genes expressed per cell",
+             "per": "Cells", "values": (data_set != 0).sum(axis = 1)},
+            {"name": plot_name + "_genes_mean",
+             "label": "Mean counts per gene",
+             "per": "Genes", "values": data_set.mean(axis = 0)},
+            {"name": plot_name + "_genes_variance",
+             "label": "Count variance per gene",
+             "per": "Genes", "values": data_set.var(axis = 0)}
+        ]
+        
+        for series in series_set:
+            plotProfile(series["values"], series["per"], series["label"], "log",
+                series["name"])
+            plotHistogram(series["values"], series["label"], "log", series["name"])
+            print(series["label"] + ": " + 
+                "mean: {}, std: {}.".format(series["values"].mean(),
+                    series["values"].std()))
+        
+        print("")
+        
         statistics_set.append(statistics(data_set, name = data_set_name,
             tolerance = 0.5))
     
     printSummaryStatistics(statistics_set)
-    
-    # average_genes_per_cell = data_set.sum(axis = 1)
-    # print(average_genes_per_cell.std() / average_genes_per_cell.mean())
 
 def analyseModel(model, name = "model"):
     
@@ -104,18 +137,19 @@ def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
         
         cell_test = x_test[i]
         cell_test_name = name + "/cell_{}_test".format(j)
-        plotProfile(cell_test, label(), cell_test_name)
+        plotProfile(cell_test, "Cell", label(), name = cell_test_name)
         
         for variable_name in x_test_recon:
             
             cell_recon = x_test_recon[variable_name][i]
             cell_recon_name = name + "/cell_{}_recon_{}".format(j, variable_name)
-            plotProfile(cell_recon, label(variable_name), cell_recon_name)
+            plotProfile(cell_recon, "Cell", label(variable_name), name = cell_recon_name)
             
             if variable_name == "mean":
                 cell_diff = cell_test - cell_recon
                 cell_diff_name = name + "/cell_{}_diff".format(j)
-                plotProfile(cell_diff, label() + "$-$" + label(variable_name), cell_diff_name)
+                plotProfile(cell_diff, "Cell", label() + "$-$" + label(variable_name),
+                    name = cell_diff_name)
     
     # TODO Add up differences and log-ratios to compare different models.
     
@@ -209,24 +243,44 @@ def plotCountHistogram(data_set, k_min, k_max, name = None):
         
         data.saveFigure(figure, figure_name + "_" + str(i))
 
-def plotProfile(cell, label, name = None):
+def plotProfile(series, x_label, y_label, scale = "linear", name = None):
     
     figure_name = "profile"
     
     if name:
         figure_name = name + "_" + figure_name
     
-    D = cell.shape[0]
+    D = series.shape[0]
     
     figure = pyplot.figure()
     axis = figure.add_subplot(1, 1, 1)
     
     x = linspace(0, D, D)
-    # axis.bar(x, cell)
-    axis.plot(x, cell)
+    axis.plot(x, series)
     
-    axis.set_xlabel("Cell")
-    axis.set_ylabel(label)
+    axis.set_yscale(scale)
+    
+    axis.set_xlabel(x_label)
+    axis.set_ylabel(y_label)
+    
+    data.saveFigure(figure, figure_name)
+
+def plotHistogram(series, x_label, scale = "linear", name = None):
+    
+    figure_name = "histogram"
+    
+    if name:
+        figure_name = name + "_" + figure_name
+    
+    figure = pyplot.figure()
+    axis = figure.add_subplot(1, 1, 1)
+    
+    seaborn.distplot(series, kde = False, ax = axis)
+    
+    axis.set_yscale(scale)
+    
+    axis.set_xlabel(x_label)
+    # axis.set_ylabel(y_label)
     
     data.saveFigure(figure, figure_name)
 
@@ -380,6 +434,6 @@ if __name__ == '__main__':
     # data_set = data.createSampleData(1000, 500, p = 0.95)
     # analyseData(data_set, name = "sample")
     
-    # data_set, _ = data.loadDataSet("GSE63472_P14Retina_merged_digital_expression")
-    # analyseData(data_set, name = "Data/all")
+    data_set, _ = data.loadDataSet("GSE63472_P14Retina_merged_digital_expression")
+    analyseData(data_set, name = "All")
     
