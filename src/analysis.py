@@ -27,17 +27,20 @@ def analyseData(data_sets, name = "data", intensive_calculations = False):
     
     label = labelWithDefaultSymbol("x")
     statistics_set = []
+    normed = True
     
     for data_set_name, data_set in data_sets.items():
         
-        print(data_set_name.title() + ":")
+        M, F = data_set.shape
+
+        print(data_set_name.title() + "({} examples, {} features):".format(M,F))
         
         plot_name = base_name + data_set_name
         
         plotCountHistogram(data_set, k_min = 1, k_max = 10,
             name = plot_name)
         
-        plotHistogram(data_set.flatten(), "Counts", "log", plot_name)
+        plotHistogram(data_set.flatten(), "Counts", "log", normed=normed, name = plot_name)
         
         if intensive_calculations:
             plotHeatMap(data_set, name = plot_name)
@@ -61,7 +64,7 @@ def analyseData(data_sets, name = "data", intensive_calculations = False):
         for series in series_set:
             plotProfile(series["values"], series["per"], series["label"], "log",
                 series["name"])
-            plotHistogram(series["values"], series["label"], "log", series["name"])
+            plotHistogram(series["values"], series["label"], "log", normed=normed, name = series["name"])
             print(series["label"] + ": " + 
                 "mean: {}, std: {}.".format(series["values"].mean(),
                     series["values"].std()))
@@ -265,7 +268,7 @@ def plotProfile(series, x_label, y_label, scale = "linear", name = None):
     
     data.saveFigure(figure, figure_name)
 
-def plotHistogram(series, x_label, scale = "linear", name = None):
+def plotHistogram(series, x_label, scale = "linear", normed=False, name = None):
     
     figure_name = "histogram"
     
@@ -275,7 +278,7 @@ def plotHistogram(series, x_label, scale = "linear", name = None):
     figure = pyplot.figure()
     axis = figure.add_subplot(1, 1, 1)
     
-    seaborn.distplot(series, kde = False, ax = axis)
+    seaborn.distplot(series, kde = False, norm_hist=normed,ax = axis)
     
     axis.set_yscale(scale)
     
@@ -435,5 +438,5 @@ if __name__ == '__main__':
     # analyseData(data_set, name = "sample")
     
     data_set, _ = data.loadDataSet("GSE63472_P14Retina_merged_digital_expression")
-    analyseData(data_set, name = "All")
+    analyseData(data_set, name = "All_normed_")
     
