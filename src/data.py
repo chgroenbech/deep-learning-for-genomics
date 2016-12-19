@@ -333,9 +333,9 @@ def dataSetBaseName(splitting_method, splitting_fraction,
     return base_name
 
 def modelName(base_name, filtering_method, feature_selection, feature_size,
-    splitting_method, splitting_fraction, reconstruction_distribution, use_count_sum,
-    reconstruction_classes, latent_size, hidden_structure, learning_rate,
-    batch_size, number_of_epochs):
+    splitting_method, splitting_fraction, reconstruction_distribution,
+    reconstruction_classes, use_count_sum, latent_size, hidden_structure,
+    learning_rate, batch_size, number_of_epochs):
     
     model_name = base_name + "_" + \
         dataSetBaseName(splitting_method, splitting_fraction,

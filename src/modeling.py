@@ -464,7 +464,8 @@ def log_negative_binomial(x, p, log_r, eps = 0.0):
     
     return y
 
-def meanOfNegativeBinomialDistribution(p, log_r):
+def meanOfNegativeBinomialDistribution(p, log_r, eps = 1e-6):
+    p = numpy.clip(p, eps, 1 - eps)
     return p * numpy.exp(log_r) / (1 - p)
 
 def log_zero_inflated_poisson(x, pi, log_lambda, eps = 0.0):
