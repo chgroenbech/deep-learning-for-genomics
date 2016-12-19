@@ -5,7 +5,7 @@ import data
 from matplotlib import pyplot
 import seaborn
 
-from numpy import linspace, random, nonzero, where, inf, log, exp, empty, arange, concatenate
+from numpy import linspace, random, nonzero, where, inf, log, exp, empty, arange, concatenate, sort
 from sklearn.decomposition import PCA
 
 from aux import labelWithDefaultSymbol
@@ -57,14 +57,14 @@ def analyseData(data_sets, name = "data", intensive_calculations = False):
             {"name": plot_name + "_genes_mean",
              "label": "Mean counts per gene",
              "per": "Genes", "values": data_set.mean(axis = 0)},
-            {"name": plot_name + "_genes_variance",
-             "label": "Count variance per gene",
-             "per": "Genes", "values": data_set.var(axis = 0)}
+            {"name": plot_name + "_genes_variance_sorted",
+             "label": "Sorted count variance per gene",
+             "per": "Genes", "values": sort(data_set.var(axis = 0))}
         ]
         
         for series in series_set:
             plotProfile(series["values"], series["per"], series["label"], "log",
-                series["name"])
+                bar = True, name = series["name"])
             plotHistogram(series["values"], series["label"], "log", normed=normed, name = series["name"])
             print(series["label"] + ": " + 
                 "mean: {}, std: {}.".format(series["values"].mean(),
@@ -111,6 +111,9 @@ def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
     
     print("")
     
+    diff = x_test - x_test_recon["mean"]
+    log_ratio = log(x_test / x_test_recon["mean"] + 1)
+    
     if intensive_calculations:
         print("Creating heat maps.")
         
@@ -122,11 +125,11 @@ def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
             name = reconstructed_test_set_name)
         
         difference_name = name + "/test_difference"
-        plotHeatMap(x_test - x_test_recon["mean"], x_test_headers, clusters,
+        plotHeatMap(diff, x_test_headers, clusters,
             center = 0, name = difference_name)
         
         log_ratio_name = name + "/test_log_ratio"
-        plotHeatMap(log(x_test / x_test_recon["mean"] + 1), x_test_headers, clusters,
+        plotHeatMap(log_ratio, x_test_headers, clusters,
             center = 0, name = log_ratio_name)
     
     print("Creating latent space scatter plot.")
@@ -156,7 +159,8 @@ def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
                     name = cell_diff_name)
     
     # TODO Add up differences and log-ratios to compare different models.
-    
+    print("Differences: sum: {}, mean: {}, std: {}".format(diff.sum(), diff.mean(), diff.std()))
+    print("log-ratios: sum: {}, mean: {}, std: {}".format(log_ratio.sum(), log_ratio.mean(), log_ratio.std()))
 
 def statistics(data_set, name = "", tolerance = 1e-3):
     
@@ -247,7 +251,7 @@ def plotCountHistogram(data_set, k_min, k_max, name = None):
         
         data.saveFigure(figure, figure_name + "_" + str(i))
 
-def plotProfile(series, x_label, y_label, scale = "linear", name = None):
+def plotProfile(series, x_label, y_label, scale = "linear", bar = False, name = None):
     
     figure_name = "profile"
     
@@ -260,7 +264,10 @@ def plotProfile(series, x_label, y_label, scale = "linear", name = None):
     axis = figure.add_subplot(1, 1, 1)
     
     x = linspace(0, D, D)
-    axis.plot(x, series)
+    if bar:
+        axis.bar(x, series)
+    else:
+        axis.plot(x, series)
     
     axis.set_yscale(scale)
     
@@ -440,4 +447,28 @@ if __name__ == '__main__':
     
     data_set, _ = data.loadDataSet("GSE63472_P14Retina_merged_digital_expression")
     analyseData(data_set, name = "All")
+    
+    data_name = "GSE63472_P14Retina_merged_digital_expression"
+    splitting_method = "Macosko"
+    splitting_fraction = None
+    feature_selection = None
+    feature_size = None
+    filtering_method = None
+    clusters = None
+    
+    (training_set, training_headers), (validation_set, validation_headers), \
+        (test_set, test_headers) = data.loadCountData(data_name,
+        splitting_method, splitting_fraction, feature_selection, feature_size,
+        filtering_method, clusters)
+    
+    print("")
+    
+    data_set_base_name = data.dataSetBaseName(splitting_method, splitting_fraction,
+        filtering_method, feature_selection, feature_size)
+    
+    data_sets = {"training": training_set,
+                 "validation": validation_set,
+                 "test": test_set}
+    
+    analysis.analyseData(data_sets, name = data_set_base_name)
     

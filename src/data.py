@@ -320,8 +320,10 @@ def saveSparseData(data, headers, file_path):
 def dataSetBaseName(splitting_method, splitting_fraction,
     filtering_method, feature_selection, feature_size):
     
-    base_name = "s_" + splitting_method.replace(" ", "_") + "_" \
-        + str(splitting_fraction)
+    base_name = "s_" + splitting_method.replace(" ", "_")
+    
+    if splitting_method = "random":
+        base_name += "_" +  str(splitting_fraction)
     
     if filtering_method:
         base_name += "_f_" + filtering_method[0].replace(" ", "_")
