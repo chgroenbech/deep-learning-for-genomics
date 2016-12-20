@@ -375,9 +375,9 @@ class VariationalAutoEncoderForCounts(object):
         inputs = [x_test]
         if self.use_count_sum:
             inputs.append(n_test)
-        lower_bound_test, _, _ = self.f_eval(*inputs)
+        lower_bound_test, ENRE_test, KL_test = self.f_eval(*inputs)
         
-        print("Lower bound for test set: {:.4g}.".format(float(lower_bound_test)))
+        print("Test set: LB: {:.4g}, ENRE: {:.4g}, KL: {:.4g}.".format(float(lower_bound_test), float(ENRE_test), float(KL_test)))
         
         z_eval = self.f_z(x_test)[0]
         

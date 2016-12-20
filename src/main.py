@@ -26,16 +26,16 @@ def main(data_name, cluster_name, splitting_method = "random", splitting_fractio
         splitting_method, splitting_fraction, feature_selection, feature_size,
         filtering_method, clusters)
     
-    print("")
-    
-    data_set_base_name = data.dataSetBaseName(splitting_method, splitting_fraction,
-        filtering_method, feature_selection, feature_size)
-    
-    data_sets = {"training": training_set,
-                 "validation": validation_set,
-                 "test": test_set}
-    
-    analysis.analyseData(data_sets, name = data_set_base_name)
+    # print("")
+    #
+    # data_set_base_name = data.dataSetBaseName(splitting_method, splitting_fraction,
+    #     filtering_method, feature_selection, feature_size)
+    #
+    # data_sets = {"training": training_set,
+    #              "validation": validation_set,
+    #              "test": test_set}
+    #
+    # analysis.analyseData(data_sets, name = data_set_base_name)
     
     metadata = {
         "filtering method": filtering_method,
@@ -112,10 +112,14 @@ def main(data_name, cluster_name, splitting_method = "random", splitting_fractio
         
         analysis.analyseModel(model, name = model_name)
         
-        test_set, reconstructed_test_set, latent_set, sample_set, test_metrics = \
+        print("")
+        
+        test_set_transformed, reconstructed_test_set, latent_set, sample_set, test_metrics = \
             model.evaluate(test_set)
         
-        analysis.analyseResults(test_set, reconstructed_test_set, test_headers,
+        print("")
+        
+        analysis.analyseResults(test_set_transformed, reconstructed_test_set, test_headers,
             clusters, latent_set, sample_set, name = model_name,
             intensive_calculations = True)
         

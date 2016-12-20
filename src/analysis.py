@@ -58,8 +58,8 @@ def analyseData(data_sets, name = "data", intensive_calculations = False):
              "label": "Mean counts per gene",
              "per": "Genes", "values": data_set.mean(axis = 0)},
             {"name": plot_name + "_genes_variance_sorted",
-             "label": "Sorted count variance per gene",
-             "per": "Genes", "values": sort(data_set.var(axis = 0))}
+             "label": "Count variance per gene",
+             "per": "Sorted genes by count variances", "values": sort(data_set.var(axis = 0))[::-1]}
         ]
         
         for series in series_set:
@@ -80,6 +80,16 @@ def analyseData(data_sets, name = "data", intensive_calculations = False):
 def analyseModel(model, name = "model"):
     
     plotLearningCurves(model.learning_curves, name)
+    
+    for i, (curve_set_name, curve_set) in enumerate(sorted(model.learning_curves.items())):
+        
+        string = curve_set_name + ": "
+        
+        for curve_name, curve in sorted(curve_set.items()):
+            string += curve_name + ": {}, ".format(curve[-1])
+        
+        print(string)
+    
 
 def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
     x_sample, name = "results", intensive_calculations = False):
@@ -111,8 +121,8 @@ def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
     
     print("")
     
-    diff = x_test - x_test_recon["mean"]
-    log_ratio = log(x_test / x_test_recon["mean"] + 1)
+    x_diff = x_test - x_test_recon["mean"]
+    x_log_ratio = log((x_test + 1) / (x_test_recon["mean"] + 1))
     
     if intensive_calculations:
         print("Creating heat maps.")
@@ -125,11 +135,11 @@ def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
             name = reconstructed_test_set_name)
         
         difference_name = name + "/test_difference"
-        plotHeatMap(diff, x_test_headers, clusters,
+        plotHeatMap(x_diff, x_test_headers, clusters,
             center = 0, name = difference_name)
         
         log_ratio_name = name + "/test_log_ratio"
-        plotHeatMap(log_ratio, x_test_headers, clusters,
+        plotHeatMap(x_log_ratio, x_test_headers, clusters,
             center = 0, name = log_ratio_name)
     
     print("Creating latent space scatter plot.")
@@ -153,14 +163,21 @@ def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
             plotProfile(cell_recon, "Cell", label(variable_name), name = cell_recon_name)
             
             if variable_name == "mean":
-                cell_diff = cell_test - cell_recon
+                cell_diff = x_diff[i]
                 cell_diff_name = name + "/cell_{}_diff".format(j)
                 plotProfile(cell_diff, "Cell", label() + "$-$" + label(variable_name),
                     name = cell_diff_name)
+                    
+                cell_log_ratio = x_log_ratio[i]
+                cell_log_ratio_name = name + "/cell_{}_log_ratio".format(j)
+                plotProfile(cell_log_ratio, "Cell",
+                    "$\\log (($" + label() + "$+1)($" + label(variable_name) + "$+1))$",
+                    name = cell_log_ratio_name)
     
-    # TODO Add up differences and log-ratios to compare different models.
-    print("Differences: sum: {}, mean: {}, std: {}".format(diff.sum(), diff.mean(), diff.std()))
-    print("log-ratios: sum: {}, mean: {}, std: {}".format(log_ratio.sum(), log_ratio.mean(), log_ratio.std()))
+    print("")
+    
+    print("Differences: sum: {}, mean: {}, std: {}".format(x_diff.sum(), x_diff.mean(), x_diff.std()))
+    print("log-ratios: sum: {}, mean: {}, std: {}".format(x_log_ratio.sum(), x_log_ratio.mean(), x_log_ratio.std()))
 
 def statistics(data_set, name = "", tolerance = 1e-3):
     
@@ -346,18 +363,14 @@ def plotHeatMap(data_set, data_set_headers = None, clusters = None, center = Non
 
 def plotLearningCurves(curves, name = None):
     
-    figure_1_name = "learning_curves"
-    figure_2_name = "learning_curves_KL"
+    print("Plotting learning curves.")
+    
+    figure_name = "learning_curves"
     
     if name:
-        figure_1_name = name + "/" + figure_1_name
-        figure_2_name = name + "/" + figure_2_name
+        figure_name = name + "/" + figure_name
     
-    figure_1 = pyplot.figure()
-    axis_1 = figure_1.add_subplot(1, 1, 1)
-    
-    figure_2 = pyplot.figure()
-    axis_2 = figure_2.add_subplot(1, 1, 1)
+    figure, (axis_1, axis_2) = pyplot.subplots(2, sharex = True, figsize = (6.4, 9.6))
     
     for i, (curve_set_name, curve_set) in enumerate(sorted(curves.items())):
         
@@ -369,7 +382,7 @@ def plotLearningCurves(curves, name = None):
                 line_style = "solid"
                 axis = axis_1
             elif curve_name == "ENRE":
-                curve_name = "$\\log(p|z)$"
+                curve_name = "$\\log p(x|z)$"
                 line_style = "dashed"
                 axis = axis_1
             elif curve_name == "KL":
@@ -380,17 +393,16 @@ def plotLearningCurves(curves, name = None):
             label = curve_name + " ({} set)".format(curve_set_name)
             axis.plot(curve, color = colour, linestyle = line_style, label = label)
     
-    axis_1.legend(loc = "best")
+    handles, labels = axis_1.get_legend_handles_labels()
+    labels, handles = zip(*sorted(zip(labels, handles), key=lambda t: t[0]))
+    
+    axis_1.legend(handles, labels, loc = "best")
     axis_2.legend(loc = "best")
     
-    axis_1.set_xlabel("Epoch")
+    # axis_1.set_xlabel("Epoch")
     axis_2.set_xlabel("Epoch")
     
-    # axis_1.set_ylabel("Learning curve")
-    # axis_2.set_ylabel("KL divergence")
-    
-    data.saveFigure(figure_1, figure_1_name)
-    data.saveFigure(figure_2, figure_2_name)
+    data.saveFigure(figure, figure_name)
 
 def plotLatentSpace(latent_set, latent_set_headers = None, clusters = None, name = None):
     
@@ -423,7 +435,6 @@ def plotLatentSpace(latent_set, latent_set_headers = None, clusters = None, name
     
         for cell in cluster:
             index = where(latent_set_headers["cells"] == cell)[0]
-            # print(index) # cells in headers, and hence in test set, are clustered
             if len(index) == 0:
                 continue
             subset.append(int(index))
@@ -435,7 +446,7 @@ def plotLatentSpace(latent_set, latent_set_headers = None, clusters = None, name
             c = data.cluster_colours[cluster_id], edgecolors = None,
             label = cluster_id)
     
-    axis.legend(loc="best")
+    # axis.legend(loc="best")
     
     data.saveFigure(figure, figure_name)
 
@@ -445,12 +456,12 @@ if __name__ == '__main__':
     # data_set = data.createSampleData(1000, 500, p = 0.95)
     # analyseData(data_set, name = "sample")
     
-    data_set, _ = data.loadDataSet("GSE63472_P14Retina_merged_digital_expression")
-    analyseData(data_set, name = "All")
+    # data_set, _ = data.loadDataSet("GSE63472_P14Retina_merged_digital_expression")
+    # analyseData(data_set, name = "All")
     
     data_name = "GSE63472_P14Retina_merged_digital_expression"
     splitting_method = "Macosko"
-    splitting_fraction = None
+    splitting_fraction = 0.8
     feature_selection = None
     feature_size = None
     filtering_method = None
@@ -470,5 +481,5 @@ if __name__ == '__main__':
                  "validation": validation_set,
                  "test": test_set}
     
-    analysis.analyseData(data_sets, name = data_set_base_name)
+    analyseData(data_sets, name = data_set_base_name)
     

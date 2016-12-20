@@ -196,7 +196,7 @@ def selectFeatureIndices(data, feature_selection = None, feature_size = None):
         index_features = sort(index_features)
     
     elif feature_selection is None:
-        index_features = slice(D)
+        index_features = arange(D)
     
     return index_features
 
@@ -320,10 +320,8 @@ def saveSparseData(data, headers, file_path):
 def dataSetBaseName(splitting_method, splitting_fraction,
     filtering_method, feature_selection, feature_size):
     
-    base_name = "s_" + splitting_method.replace(" ", "_")
-    
-    if splitting_method = "random":
-        base_name += "_" +  str(splitting_fraction)
+    base_name = "s_" + splitting_method.replace(" ", "_") + "_" \
+        +  str(splitting_fraction)
     
     if filtering_method:
         base_name += "_f_" + filtering_method[0].replace(" ", "_")
@@ -424,7 +422,7 @@ def saveFigure(figure, figure_name, no_spine = True):
     
     if no_spine:
         despine()
-    figure.savefig(figures_path(figure_name + figure_extension))
+    figure.savefig(figures_path(figure_name + figure_extension), bbox_inches='tight')
 
 cluster_colours = {
      1: (0.92, 0.24, 0.10),
