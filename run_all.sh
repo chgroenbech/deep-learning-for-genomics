@@ -11,16 +11,18 @@ SPLITTING_METHOD="random"
 SPLITTING_FRACTION=0.8
 FEATURE_SELECTION="high_variance"
 FEATURE_SIZE=5000
-RECONSTRUCTION_DISTRIBUTIONS="bernoulli poisson negative_binomial zero_inflated_poisson zero_inflated_negative_binomial"
+RECONSTRUCTION_DISTRIBUTIONS="bernoulli poisson negative_binomial zero_inflated_negative_binomial zero_inflated_poisson"
 NUMBERS_OF_RECONSTRUCTION_CLASSES="0 6"
 # NUMBERS_OF_EPOCHS="1"
 # NUMBERS_OF_EPOCHS="5"
 # NUMBERS_OF_EPOCHS="20"
-NUMBERS_OF_EPOCHS="50"
+NUMBERS_OF_EPOCHS="200"
 BATCH_SIZE=100
-LEARNING_RATE=1e-4
+LEARNING_RATE=1e-5
 # LEARNING_RATE=1e-3
 # LEARNING_RATE=1e-2
+NUMBER_OF_WARMUP_EPOCHS=100
+
 
 ./src/main.py --data-name $DATA_NAME --cluster-name $CLUSTER_NAME \
               --latent-sizes $LATENT_SIZES \
@@ -35,5 +37,6 @@ LEARNING_RATE=1e-4
               --numbers-of-epochs $NUMBERS_OF_EPOCHS \
               --batch-size $BATCH_SIZE \
               --learning-rate $LEARNING_RATE \
+              --N-warmup_epochs $NUMBER_OF_WARMUP_EPOCHS \
               $1
               # $use_count_sum \

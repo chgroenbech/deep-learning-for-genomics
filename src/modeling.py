@@ -35,7 +35,8 @@ class VariationalAutoEncoderForCounts(object):
         
         self.use_count_sum = use_count_sum and \
             (reconstruction_distribution != "bernoulli")
-        
+        # Add warm-up to the model, weighting the KL-term gradually higher for each epoch
+
         print("Setting up model.")
         print("    feature size: {}".format(feature_shape))
         print("    latent size: {}".format(latent_size))
@@ -63,7 +64,10 @@ class VariationalAutoEncoderForCounts(object):
         symbolic_z = T.matrix('z') # latent variable
         
         self.number_of_epochs_trained = 0
+
         symbolic_learning_rate = T.scalar("epsilon")
+        symbolic_warm_up_weight = T.scalar("beta")
+
         self.learning_curves = {
             "training": {
                 "LB": [],
@@ -218,7 +222,7 @@ class VariationalAutoEncoderForCounts(object):
         # Likelihood
         
         lower_bound_train, log_p_x_train, KL__train = \
-            self.lowerBound(symbolic_x, x_theta_train, z_mu_train, z_log_var_train)
+            self.lowerBound(symbolic_x, x_theta_train, z_mu_train, z_log_var_train, beta=symbolic_warm_up_weight)
         lower_bound_eval, log_p_x_eval, KL__eval = \
             self.lowerBound(symbolic_x, x_theta_eval, z_mu_eval, z_log_var_eval)
         
@@ -239,7 +243,8 @@ class VariationalAutoEncoderForCounts(object):
         if self.use_count_sum:
             inputs.append(symbolic_n)
         inputs.append(symbolic_learning_rate)
-        
+        inputs.append(symbolic_warm_up_weight)
+
         self.f_train = theano.function(
             inputs = inputs,
             outputs = [lower_bound_train, log_p_x_train, KL__train],
@@ -271,15 +276,15 @@ class VariationalAutoEncoderForCounts(object):
             inputs = inputs,
             outputs = [x_theta_eval[p] for p in self.x_parameters])
     
-    def lowerBound(self, x, x_theta, z_mu, z_log_var):
+    def lowerBound(self, x, x_theta, z_mu, z_log_var, beta=1):
         #note that we sum the latent dimension and mean over the samples
         log_px_given_z = self.expectedNegativeReconstructionError(x, x_theta, eps = 1e-6).sum(axis = 1).mean()
         KL_qp = kl_normal2_stdnormal(z_mu, z_log_var).sum(axis = 1).mean()
-        LL = - KL_qp + log_px_given_z
+        LL = - beta * KL_qp + log_px_given_z
         return LL, log_px_given_z, KL_qp
     
     def train(self, training_set, validation_set = None, N_epochs = 50, batch_size = 100,
-        learning_rate = 1e-3):
+        learning_rate = 1e-3, N_warmup_epochs=50):
         
         M = training_set.shape[0]
         
@@ -310,7 +315,8 @@ class VariationalAutoEncoderForCounts(object):
             self.number_of_epochs_trained + N_epochs):
             
             epoch_start = time()
-            
+            beta = min((epoch+1)/N_warmup_epochs, 1)
+
             shuffled_indices = numpy.random.permutation(M)
             
             for i in range(0, M, batch_size):
@@ -319,6 +325,7 @@ class VariationalAutoEncoderForCounts(object):
                 if self.use_count_sum:
                     inputs.append(n_train[subset])
                 inputs.append(learning_rate)
+                inputs.append(beta)
                 out = self.f_train(*inputs)
             
             inputs = [x_train]

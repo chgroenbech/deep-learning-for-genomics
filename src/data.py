@@ -335,7 +335,7 @@ def dataSetBaseName(splitting_method, splitting_fraction,
 def modelName(base_name, filtering_method, feature_selection, feature_size,
     splitting_method, splitting_fraction, reconstruction_distribution,
     reconstruction_classes, use_count_sum, latent_size, hidden_structure,
-    learning_rate, batch_size, number_of_epochs):
+    learning_rate, batch_size, number_of_epochs, N_warmup_epochs):
     
     model_name = base_name + "_" + \
         dataSetBaseName(splitting_method, splitting_fraction,
@@ -352,9 +352,10 @@ def modelName(base_name, filtering_method, feature_selection, feature_size,
     model_name += "_l_" + str(latent_size) + "_h_" + "_".join(map(str,
         hidden_structure))
     
-    model_name += "_lr_{:.1g}".format(learning_rate) 
-    model_name += "_b_" + str(batch_size) + "_e_" + str(number_of_epochs)
-    
+    model_name += "_lr_{:.1g}".format(learning_rate)
+    model_name += "_b_" + str(batch_size) + "_wu_" + str(N_warmup_epochs)
+    model_name += "_e_" + str(number_of_epochs)
+
     return model_name
 
 def saveModel(model, model_name):
