@@ -13,7 +13,7 @@ def main(data_name, cluster_name, splitting_method = "random", splitting_fractio
     filtering_method = None, feature_selection = None, feature_size = None,
     latent_sizes = None, hidden_structure = None, reconstruction_distributions = None, 
     numbers_of_reconstruction_classes = [0], use_count_sum = False, numbers_of_epochs = 10, batch_size = 100,
-    learning_rate = 1e-3 , N_warmup_epochs=50, force_training = False):
+    learning_rate = 1e-3 , N_warmup_epochs=50, use_batch_norm=0, force_training = False):
     
     random.seed(42)
     
@@ -82,10 +82,10 @@ def main(data_name, cluster_name, splitting_method = "random", splitting_fractio
         model_name = data.modelName("VAE", filtering_method, feature_selection,
             feature_size, splitting_method, splitting_fraction,
             reconstruction_distribution, number_of_reconstruction_classes, use_count_sum,
-            latent_size, hidden_structure, learning_rate, batch_size, number_of_epochs, N_warmup_epochs)
+            latent_size, hidden_structure, learning_rate, batch_size, number_of_epochs, N_warmup_epochs, use_batch_norm)
         
         model = modeling.VariationalAutoEncoderForCounts(feature_size, latent_size,
-            hidden_structure, reconstruction_distribution, number_of_reconstruction_classes, use_count_sum)
+            hidden_structure, reconstruction_distribution, number_of_reconstruction_classes, use_count_sum, use_batch_norm)
         
         previous_model_name, epochs_still_to_train = \
             data.findPreviouslyTrainedModel(model_name)
@@ -165,7 +165,9 @@ parser.add_argument("--batch-size", metavar = "B", type = int, default = 100,
 parser.add_argument("--learning-rate", metavar = "epsilon", type = float,
     default = 1e-3, help = "learning rate when training")
 parser.add_argument("--N-warmup_epochs", metavar = "N", type = int,
-    default = 50, help = "The number of epochs with a linear weight on the KL-term. Choose 1 for no warmup.")
+    default = 50, help = "The number of epochs with a linear weight on the KL-term. Choose 1 for no warmup")
+parser.add_argument("--use-batch-norm", metavar = "bn", type = int, 
+    default = 0, help = "add batch normalization to all hidden layers")
 parser.add_argument("--force-training", action = "store_true",
     help = "train model whether or not it was previously trained")
 

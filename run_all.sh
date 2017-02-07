@@ -16,13 +16,13 @@ NUMBERS_OF_RECONSTRUCTION_CLASSES="0 6"
 # NUMBERS_OF_EPOCHS="1"
 # NUMBERS_OF_EPOCHS="5"
 # NUMBERS_OF_EPOCHS="20"
-NUMBERS_OF_EPOCHS="200"
+NUMBERS_OF_EPOCHS="100"
 BATCH_SIZE=100
-LEARNING_RATE=1e-5
+# LEARNING_RATE=1e-5
 # LEARNING_RATE=1e-3
-# LEARNING_RATE=1e-2
-NUMBER_OF_WARMUP_EPOCHS=100
-
+LEARNING_RATE=1e-3
+NUMBER_OF_WARMUP_EPOCHS="50"
+USE_BATCH_NORM=1
 
 ./src/main.py --data-name $DATA_NAME --cluster-name $CLUSTER_NAME \
               --latent-sizes $LATENT_SIZES \
@@ -38,5 +38,6 @@ NUMBER_OF_WARMUP_EPOCHS=100
               --batch-size $BATCH_SIZE \
               --learning-rate $LEARNING_RATE \
               --N-warmup_epochs $NUMBER_OF_WARMUP_EPOCHS \
+              --use-batch-norm $USE_BATCH_NORM \
               $1
               # $use_count_sum \

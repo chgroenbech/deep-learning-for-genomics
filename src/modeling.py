@@ -8,7 +8,7 @@ import theano.tensor as T
 import numpy
 
 from lasagne.layers import (
-    InputLayer, DenseLayer, ReshapeLayer, ConcatLayer,
+    InputLayer, DenseLayer, ReshapeLayer, ConcatLayer, batch_norm, BatchNormLayer,
     get_output,
     get_all_params, get_all_param_values, set_all_param_values
 )
@@ -31,11 +31,13 @@ from aux import convertTimeToString
 class VariationalAutoEncoderForCounts(object):
     def __init__(self, feature_shape, latent_size, hidden_structure,
         reconstruction_distribution = None, number_of_reconstruction_classes = None,
-        use_count_sum = False):
+        use_count_sum = False, use_batch_norm = False):
         
         self.use_count_sum = use_count_sum and \
             (reconstruction_distribution != "bernoulli")
         # Add warm-up to the model, weighting the KL-term gradually higher for each epoch
+
+        self.use_batch_norm = use_batch_norm
 
         print("Setting up model.")
         print("    feature size: {}".format(feature_shape))
@@ -50,6 +52,8 @@ class VariationalAutoEncoderForCounts(object):
                   " (including 0s)")
         if self.use_count_sum:
             print("    using count sums")
+        if self.use_batch_norm:
+            print("    , using batch normalization of each layer.")
         print("")
         
         # Setup
@@ -144,10 +148,17 @@ class VariationalAutoEncoderForCounts(object):
         l_enc = l_enc_in
         
         for i, hidden_size in enumerate(hidden_structure):
-            l_enc = DenseLayer(l_enc, num_units = hidden_size, nonlinearity = rectify, name = 'ENC_DENSE{:d}'.format(i + 1))
+            if self.use_batch_norm:
+                l_enc = batch_norm(DenseLayer(l_enc, num_units = hidden_size, nonlinearity = rectify, name = 'ENC_DENSE{:d}'.format(i + 1)))
+            else:
+                l_enc = DenseLayer(l_enc, num_units = hidden_size, nonlinearity = rectify, name = 'ENC_DENSE{:d}'.format(i + 1))
         
-        l_z_mu = DenseLayer(l_enc, num_units = latent_size, nonlinearity = None, name = 'ENC_Z_MU')
-        l_z_log_var = DenseLayer(l_enc, num_units = latent_size, nonlinearity = lambda x: T.clip(x, -10, 10), name = 'ENC_Z_LOG_VAR')
+        if self.use_batch_norm:
+            l_z_mu = batch_norm(DenseLayer(l_enc, num_units = latent_size, nonlinearity = None, name = 'ENC_Z_MU'))
+            l_z_log_var = batch_norm(DenseLayer(l_enc, num_units = latent_size, nonlinearity = lambda x: T.clip(x, -10, 10), name = 'ENC_Z_LOG_VAR'))
+        else: 
+            l_z_mu = DenseLayer(l_enc, num_units = latent_size, nonlinearity = None, name = 'ENC_Z_MU')
+            l_z_log_var = DenseLayer(l_enc, num_units = latent_size, nonlinearity = lambda x: T.clip(x, -10, 10), name = 'ENC_Z_LOG_VAR')
         
         # Sample a latent representation z \sim q(z|x) = N(mu(x), logvar(x))
         l_z = SimpleSampleLayer(mean = l_z_mu, log_var = l_z_log_var, name = "ENC_SAMPLE")
@@ -166,25 +177,46 @@ class VariationalAutoEncoderForCounts(object):
             l_dec = l_dec_z_in
         
         for i, hidden_size in enumerate(reversed(hidden_structure)):
-            l_dec = DenseLayer(l_dec, num_units = hidden_size, nonlinearity = rectify, name = 'DEC_DENSE{:d}'.format(len(hidden_structure) - i))
-        
+            if self.use_batch_norm:
+                l_dec = batch_norm(DenseLayer(l_dec, num_units = hidden_size, nonlinearity = rectify, name = 'DEC_DENSE{:d}'.format(len(hidden_structure) - i)))
+            else: 
+                l_dec = DenseLayer(l_dec, num_units = hidden_size, nonlinearity = rectify, name = 'DEC_DENSE{:d}'.format(len(hidden_structure) - i))
+
         l_x_theta = {}
         
         for p in self.x_parameters:
             p_name = 'DEC_X_' + p.upper()
             if self.reconstruction_activation_functions[p] == softmax:
-                l_dense = DenseLayer(l_dec,
-                    num_units = feature_shape * (self.k_max + 1),
-                    nonlinearity = identity, name = p_name + "_DENSE")
+                if self.use_batch_norm:
+                    l_dense = batch_norm(DenseLayer(l_dec,
+                        num_units = feature_shape * (self.k_max + 1),
+                        nonlinearity = identity, name = p_name + "_DENSE"))
+                else:
+                    l_dense = DenseLayer(l_dec,
+                        num_units = feature_shape * (self.k_max + 1),
+                        nonlinearity = identity, name = p_name + "_DENSE")
+
                 l_reshape = ReshapeLayer(l_dense, (-1, (self.k_max + 1)))
-                l_softmax = DenseLayer(l_reshape, num_units = (self.k_max + 1),
+
+                if self.use_batch_norm:
+                    l_softmax = batch_norm(DenseLayer(l_reshape, num_units = (self.k_max + 1),
+                    nonlinearity = softmax, name = p_name + "_SOFTMAX"))
+                else:
+                    l_softmax = DenseLayer(l_reshape, num_units = (self.k_max + 1),
                     nonlinearity = softmax, name = p_name + "_SOFTMAX")
+
                 l_x_theta[p] = ReshapeLayer(l_softmax,
                     (-1, feature_shape, (self.k_max + 1)))
             else:
-                l_x_theta[p] = DenseLayer(l_dec, num_units = feature_shape,
-                    nonlinearity = self.reconstruction_activation_functions[p],
-                    name = p_name)
+                if self.use_batch_norm:
+                    l_x_theta[p] = batch_norm(DenseLayer(l_dec, num_units = feature_shape,
+                        nonlinearity = self.reconstruction_activation_functions[p],
+                        name = p_name))
+                else:
+                    l_x_theta[p] = DenseLayer(l_dec, num_units = feature_shape,
+                        nonlinearity = self.reconstruction_activation_functions[p],
+                        name = p_name)
+
         
         self.decoder = {p: l_x_theta[p] for p in self.x_parameters}
         
@@ -303,6 +335,7 @@ class VariationalAutoEncoderForCounts(object):
             training_string += " additional"
         training_string += " epoch{}".format("s" if N_epochs > 1 else "")
         training_string += " with a learning rate of {:.3g}".format(learning_rate)
+        training_string += " and warm-up for the first " + str(N_warmup_epochs) + " epochs"
         training_string += "."
         print(training_string)
         
