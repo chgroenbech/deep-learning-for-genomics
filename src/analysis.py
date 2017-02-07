@@ -5,7 +5,7 @@ import data
 from matplotlib import pyplot
 import seaborn
 
-from numpy import linspace, random, nonzero, where, inf, log, exp, empty, arange, concatenate, sort
+from numpy import array, linspace, random, nonzero, where, inf, log, exp, empty, arange, concatenate, sort, argsort
 from sklearn.decomposition import PCA
 
 from aux import labelWithDefaultSymbol
@@ -82,13 +82,17 @@ def analyseModel(model, name = "model"):
     plotLearningCurves(model.learning_curves, name)
     
     for i, (curve_set_name, curve_set) in enumerate(sorted(model.learning_curves.items())):
-        
+        if curve_set_name == "KL_all":
+            continue
+
         string = curve_set_name + ": "
         
         for curve_name, curve in sorted(curve_set.items()):
             string += curve_name + ": {}, ".format(curve[-1])
         
         print(string)
+
+    plotKLdivergenceHeatmap(model.learning_curves["training"]["KL_all"], name = name)
     
 
 def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
@@ -173,6 +177,10 @@ def analyseResults(x_test, x_test_recon, x_test_headers, clusters, latent_set,
                 plotProfile(cell_log_ratio, "Cell",
                     "$\\log (($" + label() + "$+1)($" + label(variable_name) + "$+1))$",
                     name = cell_log_ratio_name)
+
+                cell_comparison_name = name + "/cell_{}_comparison".format(j)
+                plotSortedProfile(cell_test, cell_recon, "Cells sorted by original counts",
+                    "Counts", scale = "log", name = cell_comparison_name)
     
     print("")
     
@@ -293,6 +301,35 @@ def plotProfile(series, x_label, y_label, scale = "linear", bar = False, name = 
     
     data.saveFigure(figure, figure_name)
 
+def plotSortedProfile(original_series, reconstructed_series, x_label, y_label, scale = "log", name = None):
+    
+    figure_name = "profile"
+    
+    if name:
+        figure_name = name + "_" + figure_name
+    
+    sort_idx = argsort(original_series)[::-1]
+
+    D = original_series.shape[0]
+    
+    figure = pyplot.figure()
+    axis = figure.add_subplot(1, 1, 1)
+    
+    x = linspace(0, D, D)
+    axis.plot(x, original_series[sort_idx], zorder=1, label='Original')
+    axis.plot(x, reconstructed_series[sort_idx], zorder=0, label='Reconstruction')
+    
+    axis.legend()
+
+    axis.set_yscale(scale)
+    axis.set_xscale(scale)
+    
+    axis.set_xlabel(x_label)
+    axis.set_ylabel(y_label)
+    
+    data.saveFigure(figure, figure_name)
+
+
 def plotHistogram(series, x_label, scale = "linear", normed=False, name = None):
     
     figure_name = "histogram"
@@ -371,7 +408,8 @@ def plotLearningCurves(curves, name = None):
         figure_name = name + "/" + figure_name
     
     figure, (axis_1, axis_2) = pyplot.subplots(2, sharex = True, figsize = (6.4, 9.6))
-    
+
+
     for i, (curve_set_name, curve_set) in enumerate(sorted(curves.items())):
         
         colour = palette[i]
@@ -389,6 +427,8 @@ def plotLearningCurves(curves, name = None):
                 line_style = "dashed"
                 curve_name = "$KL(p||q)$"
                 axis = axis_2
+            elif curve_name == "KL_all":
+                continue
             epochs = arange(len(curve)) + 1
             label = curve_name + " ({} set)".format(curve_set_name)
             axis.plot(curve, color = colour, linestyle = line_style, label = label)
@@ -403,6 +443,31 @@ def plotLearningCurves(curves, name = None):
     axis_2.set_xlabel("Epoch")
     
     data.saveFigure(figure, figure_name)
+
+def plotKLdivergenceHeatmap(KL_all, name = None):
+    
+    print("Plotting KL-divergence heatmap (activity of latent units).")
+    
+    figure_name = "KL_divergence_heatmap"
+    
+    if name:
+        figure_name = name + "/" + figure_name
+    
+    figure = pyplot.figure()
+    axis = figure.add_subplot(1, 1, 1)
+    
+    KL_array = array(KL_all)
+
+    print("Dimensions of KL-activations:")
+    print(KL_array.shape)
+
+    seaborn.heatmap(log(KL_array.T), xticklabels = True, yticklabels = False,
+        cbar = True, center = None, square = True, ax = axis)
+    
+    axis.set_xlabel("Epoch")
+    axis.set_ylabel("$log KL(p_i||q_i)$")
+    
+    data.saveFigure(figure, figure_name, no_spine = False)  
 
 def plotLatentSpace(latent_set, latent_set_headers = None, clusters = None, name = None):
     
