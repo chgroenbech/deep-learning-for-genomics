@@ -28,6 +28,8 @@ import data
 from time import time
 from aux import convertTimeToString
 
+from theano.compile.nanguardmode import NanGuardMode
+
 class VariationalAutoEncoderForCounts(object):
     def __init__(self, feature_shape, latent_size, hidden_structure,
         reconstruction_distribution = None, number_of_reconstruction_classes = None,
@@ -68,16 +70,15 @@ class VariationalAutoEncoderForCounts(object):
         symbolic_z = T.matrix('z') # latent variable
         
         self.number_of_epochs_trained = 0
-
+        
         symbolic_learning_rate = T.scalar("epsilon")
         symbolic_warm_up_weight = T.scalar("beta")
-
+        
         self.learning_curves = {
             "training": {
                 "LB": [],
                 "ENRE": [],
-                "KL": [],
-                "KL_all": []
+                "KL": []
             },
             "validation": {
                 "LB": [],
@@ -149,16 +150,18 @@ class VariationalAutoEncoderForCounts(object):
         l_enc = l_enc_in
         
         for i, hidden_size in enumerate(hidden_structure):
+            
             l_enc = DenseLayer(l_enc, num_units = hidden_size, nonlinearity = rectify, name = 'ENC_DENSE{:d}'.format(i + 1))
+            
             if self.use_batch_norm:
                 l_enc = batch_norm(l_enc)
         
+        l_z_mu = DenseLayer(l_enc, num_units = latent_size, nonlinearity = None, name = 'ENC_Z_MU')
+        l_z_log_var = DenseLayer(l_enc, num_units = latent_size, nonlinearity = lambda x: T.clip(x, -10, 10), name = 'ENC_Z_LOG_VAR')
+            
         if self.use_batch_norm:
-            l_z_mu = batch_norm(DenseLayer(l_enc, num_units = latent_size, nonlinearity = None, name = 'ENC_Z_MU'))
-            l_z_log_var = batch_norm(DenseLayer(l_enc, num_units = latent_size, nonlinearity = lambda x: T.clip(x, -10, 10), name = 'ENC_Z_LOG_VAR'))
-        else: 
-            l_z_mu = DenseLayer(l_enc, num_units = latent_size, nonlinearity = None, name = 'ENC_Z_MU')
-            l_z_log_var = DenseLayer(l_enc, num_units = latent_size, nonlinearity = lambda x: T.clip(x, -10, 10), name = 'ENC_Z_LOG_VAR')
+            l_z_mu = batch_norm(l_z_mu)
+            l_z_log_var = batch_norm(l_z_log_var)
         
         # Sample a latent representation z \sim q(z|x) = N(mu(x), logvar(x))
         l_z = SimpleSampleLayer(mean = l_z_mu, log_var = l_z_log_var, name = "ENC_SAMPLE")
@@ -177,46 +180,39 @@ class VariationalAutoEncoderForCounts(object):
             l_dec = l_dec_z_in
         
         for i, hidden_size in enumerate(reversed(hidden_structure)):
+            l_dec = DenseLayer(l_dec, num_units = hidden_size, nonlinearity = rectify, name = 'DEC_DENSE{:d}'.format(len(hidden_structure) - i))
             if self.use_batch_norm:
-                l_dec = batch_norm(DenseLayer(l_dec, num_units = hidden_size, nonlinearity = rectify, name = 'DEC_DENSE{:d}'.format(len(hidden_structure) - i)))
-            else: 
-                l_dec = DenseLayer(l_dec, num_units = hidden_size, nonlinearity = rectify, name = 'DEC_DENSE{:d}'.format(len(hidden_structure) - i))
+                l_dec = batch_norm(l_dec)
 
         l_x_theta = {}
         
         for p in self.x_parameters:
             p_name = 'DEC_X_' + p.upper()
             if self.reconstruction_activation_functions[p] == softmax:
+                
+                l_dense = DenseLayer(l_dec,
+                    num_units = feature_shape * (self.k_max + 1),
+                    nonlinearity = identity, name = p_name + "_DENSE")
                 if self.use_batch_norm:
-                    l_dense = batch_norm(DenseLayer(l_dec,
-                        num_units = feature_shape * (self.k_max + 1),
-                        nonlinearity = identity, name = p_name + "_DENSE"))
-                else:
-                    l_dense = DenseLayer(l_dec,
-                        num_units = feature_shape * (self.k_max + 1),
-                        nonlinearity = identity, name = p_name + "_DENSE")
-
+                    l_dense = batch_norm(l_dense)
+                
                 l_reshape = ReshapeLayer(l_dense, (-1, (self.k_max + 1)))
-
-                if self.use_batch_norm:
-                    l_softmax = batch_norm(DenseLayer(l_reshape, num_units = (self.k_max + 1),
-                    nonlinearity = softmax, name = p_name + "_SOFTMAX"))
-                else:
-                    l_softmax = DenseLayer(l_reshape, num_units = (self.k_max + 1),
+                
+                l_softmax = DenseLayer(l_reshape, num_units = (self.k_max + 1),
                     nonlinearity = softmax, name = p_name + "_SOFTMAX")
-
+                
+                if self.use_batch_norm:
+                    l_softmax = batch_norm(l_softmax)
+                
                 l_x_theta[p] = ReshapeLayer(l_softmax,
                     (-1, feature_shape, (self.k_max + 1)))
+            
             else:
+                l_x_theta[p] = DenseLayer(l_dec, num_units = feature_shape,
+                    nonlinearity = self.reconstruction_activation_functions[p],
+                    name = p_name)
                 if self.use_batch_norm:
-                    l_x_theta[p] = batch_norm(DenseLayer(l_dec, num_units = feature_shape,
-                        nonlinearity = self.reconstruction_activation_functions[p],
-                        name = p_name))
-                else:
-                    l_x_theta[p] = DenseLayer(l_dec, num_units = feature_shape,
-                        nonlinearity = self.reconstruction_activation_functions[p],
-                        name = p_name)
-
+                    l_x_theta[p] = batch_norm(l_x_theta[p])
         
         self.decoder = {p: l_x_theta[p] for p in self.x_parameters}
         
@@ -253,9 +249,9 @@ class VariationalAutoEncoderForCounts(object):
         
         # Likelihood
         
-        lower_bound_train, log_p_x_train, KL__train, KL__train_all = \
+        lower_bound_train, log_p_x_train, KL__train = \
             self.lowerBound(symbolic_x, x_theta_train, z_mu_train, z_log_var_train, beta=symbolic_warm_up_weight)
-        lower_bound_eval, log_p_x_eval, KL__eval, KL__eval_all = \
+        lower_bound_eval, log_p_x_eval, KL__eval = \
             self.lowerBound(symbolic_x, x_theta_eval, z_mu_eval, z_log_var_eval)
         
         all_parameters = get_all_params([l_z] + [l_x_theta[p] for p in self.x_parameters], trainable = True)
@@ -271,26 +267,58 @@ class VariationalAutoEncoderForCounts(object):
         update_expressions = updates.adam(all_gradients, all_parameters,
             learning_rate = symbolic_learning_rate)
         
-        inputs = [symbolic_x]
-        if self.use_count_sum:
-            inputs.append(symbolic_n)
-        inputs.append(symbolic_learning_rate)
-        inputs.append(symbolic_warm_up_weight)
-
-        self.f_train = theano.function(
-            inputs = inputs,
-            outputs = [lower_bound_train, log_p_x_train, KL__train, KL__train_all],
-            updates = update_expressions)
+        # Define shared variables
         
-        inputs = [symbolic_x]
+        self.x_train = theano.shared(numpy.zeros([1, 1]),
+            theano.config.floatX, borrow = True)
+        self.x_eval = theano.shared(numpy.zeros([1, 1]),
+            theano.config.floatX, borrow = True)
+        
         if self.use_count_sum:
-            inputs.append(symbolic_n)
+            self.n_train = theano.shared(numpy.zeros([1, 1]),
+                theano.config.floatX, borrow = True)
+            self.n_eval = theano.shared(numpy.zeros([1, 1]),
+                theano.config.floatX, borrow = True)
+        
+        # Define batch variables
+        
+        symbolic_batch_size = T.iscalar('batch_size')
+        symbolic_batch_index = T.iscalar('batch_index')
+        batch_slice = slice(symbolic_batch_index * symbolic_batch_size,
+            (symbolic_batch_index + 1) * symbolic_batch_size)
+        
+        # Define training Theano function
+        
+        givens = {symbolic_x: self.x_train[batch_slice]}
+        if self.use_count_sum:
+            givens[symbolic_n] = self.n_train[batch_slice]
+        
+        self.f_train = theano.function(
+            inputs = [symbolic_batch_index, symbolic_batch_size,
+                      symbolic_learning_rate, symbolic_warm_up_weight],
+            outputs = [lower_bound_train, log_p_x_train, KL__train],
+            givens = givens,
+            updates = update_expressions,
+            # mode = NanGuardMode(nan_is_error = True, inf_is_error = True,
+            #     big_is_error = True)
+        )
+        
+        # Define evaluation Theano function
+        
+        givens = {symbolic_x: self.x_eval}
+        if self.use_count_sum:
+            givens[symbolic_n] = self.n_eval
         
         self.f_eval = theano.function(
-            inputs = inputs,
-            outputs = [lower_bound_eval, log_p_x_eval, KL__eval, KL__eval_all])
+            inputs = [],
+            outputs = [lower_bound_eval, log_p_x_eval, KL__eval],
+            givens = givens)
        
+        # Define latent Theano function
+        
         self.f_z = theano.function(inputs = [symbolic_x], outputs = [z_eval])
+        
+        # Define sample Theano function
         
         inputs = [symbolic_z]
         if self.use_count_sum:
@@ -299,6 +327,8 @@ class VariationalAutoEncoderForCounts(object):
         self.f_sample = theano.function(
             inputs = inputs,
             outputs = [x_theta_sample[p] for p in self.x_parameters])
+        
+        # Define reconstruction Theano function
         
         inputs = [symbolic_x]
         if self.use_count_sum:
@@ -311,25 +341,21 @@ class VariationalAutoEncoderForCounts(object):
     def lowerBound(self, x, x_theta, z_mu, z_log_var, beta=1):
         #note that we sum the latent dimension and mean over the samples
         log_px_given_z = self.expectedNegativeReconstructionError(x, x_theta, eps = 1e-6).sum(axis = 1).mean()
-        KL_qp = kl_normal2_stdnormal(z_mu, z_log_var).mean(axis = 0)
-        KL_qp_total = KL_qp.sum()
-        LL = - beta * KL_qp_total + log_px_given_z
-        return LL, log_px_given_z, KL_qp_total, KL_qp
+        KL_qp = kl_normal2_stdnormal(z_mu, z_log_var).sum(axis = 1).mean()
+        LL = - beta * KL_qp + log_px_given_z
+        return LL, log_px_given_z, KL_qp
     
     def train(self, training_set, validation_set = None, N_epochs = 50,
         N_warmup_epochs = 0, batch_size = 100, learning_rate = 1e-3):
         
         M = training_set.shape[0]
         
-        x_train = training_set
-        x_valid = validation_set
+        x_train = self.preprocess(training_set).astype(theano.config.floatX)
+        x_valid = self.preprocess(validation_set).astype(theano.config.floatX)
         
         if self.use_count_sum:
-            n_train = x_train.sum(axis = 1).reshape(-1, 1)
-            n_valid = x_valid.sum(axis = 1).reshape(-1, 1)
-        
-        x_train = self.preprocess(x_train)
-        x_valid = self.preprocess(x_valid)
+            n_train = training_set.sum(axis = 1).reshape(-1, 1).astype(theano.config.floatX)
+            n_valid = validation_set.sum(axis = 1).reshape(-1, 1).astype(theano.config.floatX)
         
         training_string = "Training model for {}".format(N_epochs)
         if self.number_of_epochs_trained > 0:
@@ -341,7 +367,7 @@ class VariationalAutoEncoderForCounts(object):
         training_string += "."
         print(training_string)
         
-        LL_train, logpx_train, KL_train, KL_train_all = [], [], [], []
+        LL_train, logpx_train, KL_train = [], [], []
         LL_valid, logpx_valid, KL_valid = [], [], []
         
         training_start = time()
@@ -350,38 +376,36 @@ class VariationalAutoEncoderForCounts(object):
             self.number_of_epochs_trained + N_epochs):
             
             epoch_start = time()
-
-            # Warmup weight for reducing regularization, beta*KL_qp
-            beta = min((epoch+1)/(N_warmup_epochs + 1), 1)
+            beta = min((epoch + 1) / (N_warmup_epochs + 1), 1)
 
             shuffled_indices = numpy.random.permutation(M)
             
-            for i in range(0, M, batch_size):
-                subset = shuffled_indices[i:(i + batch_size)]
-                inputs = [x_train[subset]]
-                if self.use_count_sum:
-                    inputs.append(n_train[subset])
-                inputs.append(learning_rate)
-                inputs.append(beta)
-                out = self.f_train(*inputs)
+            x_train = x_train[shuffled_indices]
+            self.x_train.set_value(x_train)
             
-            inputs = [x_train]
             if self.use_count_sum:
-                inputs.append(n_train)
-            out = self.f_eval(*inputs)
+                n_train = n_train[shuffled_indices]
+                self.n_train.set_value(n_train)
+            
+            for i in range(0, M, batch_size):
+                out = self.f_train(i, batch_size, learning_rate, beta)
+            
+            self.x_eval.set_value(x_train)
+            if self.use_count_sum:
+                self.n_eval.set_value(n_train)
+            out = self.f_eval()
             
             LL_train += [out[0]] 
             logpx_train += [out[1]]
             KL_train += [out[2]]
-            KL_train_all += [out[3]]
             
             evaluation_string = "    Training set:   LB: {:.5g}, ENRE: {:.5g}, KL: {:.5g}.".format(float(out[0]), float(out[1]), float(out[2]))
             
             if x_valid is not None:
-                inputs = [x_valid]
+                self.x_eval.set_value(x_valid)
                 if self.use_count_sum:
-                    inputs.append(n_valid)
-                out = self.f_eval(*inputs)
+                    self.n_eval.set_value(n_valid)
+                out = self.f_eval()
                 
                 LL_valid += [out[0]]
                 logpx_valid += [out[1]]
@@ -401,7 +425,6 @@ class VariationalAutoEncoderForCounts(object):
         self.learning_curves["training"]["LB"] += LL_train
         self.learning_curves["training"]["ENRE"] += logpx_train
         self.learning_curves["training"]["KL"] += KL_train
-        self.learning_curves["training"]["KL_all"] += KL_train_all
         
         self.learning_curves["validation"]["LB"] += LL_valid
         self.learning_curves["validation"]["ENRE"] += logpx_valid
@@ -411,17 +434,15 @@ class VariationalAutoEncoderForCounts(object):
     
     def evaluate(self, test_set):
         
-        x_test = test_set
+        x_test = self.preprocess(test_set).astype(theano.config.floatX)
         
         if self.use_count_sum:
-            n_test = x_test.sum(axis = 1).reshape(-1, 1)
+            n_test = test_set.sum(axis = 1).reshape(-1, 1).astype(theano.config.floatX)
         
-        x_test = self.preprocess(x_test)
-        
-        inputs = [x_test]
+        self.x_eval.set_value(x_test)
         if self.use_count_sum:
-            inputs.append(n_test)
-        lower_bound_test, ENRE_test, KL_test, _ = self.f_eval(*inputs)
+            self.n_eval.set_value(n_test)
+        lower_bound_test, ENRE_test, KL_test = self.f_eval()
         
         print("Test set: LB: {:.4g}, ENRE: {:.4g}, KL: {:.4g}.".format(float(lower_bound_test), float(ENRE_test), float(KL_test)))
         
